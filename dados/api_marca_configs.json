@@ -1,0 +1,15 @@
+[
+       {
+         "url": "https://cloud.boxnet.com.br/api/Clippings/",
+         "data": {
+           "IntegrationId": "31164605-2826-4012-956c-1a5fe2e00c03",
+           "Password": "B41B986680AADA331C89186A47FD3F7D33B91C8F"
+         }
+       },
+       {
+        "url": "https://cloud.boxnet.com.br/api/Clippings/",
+        "data": {
+          "IntegrationId": "1dca80f8-741b-4c1d-8907-f058a4ff3da6",
+          "Password": "4131F1F0BF4F797ADA7950D6D73CE37D2F35905E"
+        }
+      }     ]

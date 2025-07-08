@@ -20,40 +20,49 @@ import datetime
 import time
 import pytz
 
-# Defina a data e hora futuras desejadas (substitua pelos seus valores)
-ano_futuro = 2025
-mes_futuro = 7
-dia_futuro = 7
-hora_futura = 6
-minuto_futuro = 00
-segundo_futuro = 00
+# Função para solicitar e validar data e hora
+def solicitar_data_hora_futura():
+    while True:
+        entrada = input("Digite a data e hora futuras no formato AAAA-MM-DD HH:MM:SS: ")
+        try:
+            data_hora_futura = datetime.datetime.strptime(entrada, "%Y-%m-%d %H:%M:%S")
 
-# Defina o fuso horário de São Paulo
-fuso_horario_sp = pytz.timezone('America/Sao_Paulo')
+            # Adicionar fuso horário de São Paulo
+            fuso_horario_sp = pytz.timezone('America/Sao_Paulo')
+            data_hora_futura_sp = fuso_horario_sp.localize(data_hora_futura)
 
-# Crie um objeto datetime para a data e hora futuras no fuso horário de São Paulo
-data_hora_futura_sp = fuso_horario_sp.localize(datetime.datetime(ano_futuro, mes_futuro, dia_futuro, hora_futura, minuto_futuro, segundo_futuro))
+            # Obter data e hora atual em SP
+            data_hora_atual_sp = datetime.datetime.now(fuso_horario_sp)
+            diferenca_tempo = data_hora_futura_sp - data_hora_atual_sp
+            segundos_para_esperar = diferenca_tempo.total_seconds()
 
-# Obtenha a data e hora atuais no fuso horário de São Paulo
-data_hora_atual_sp = datetime.datetime.now(fuso_horario_sp)
+            if segundos_para_esperar < 0:
+                print("A data e hora futuras especificadas já passaram.")
+                continuar = input("Deseja continuar mesmo assim? (S/N): ").strip().upper()
+                if continuar == "S":
+                    return segundos_para_esperar
+                else:
+                    print("Vamos tentar novamente...\n")
+                    continue
+            else:
+                return segundos_para_esperar
 
-# Calcule a diferença de tempo
-diferenca_tempo = data_hora_futura_sp - data_hora_atual_sp
+        except ValueError:
+            print("Formato inválido. Use o formato AAAA-MM-DD HH:MM:SS.\n")
 
-# Obtenha o número total de segundos
-segundos_para_esperar = diferenca_tempo.total_seconds()
+# Chamada da função
+segundos_para_esperar = solicitar_data_hora_futura()
 
-# Verifique se o tempo futuro ainda não passou
+# Aguardar se for no futuro
 if segundos_para_esperar > 0:
-    horas = segundos_para_esperar /60/60
-    #minutos = (segundos_para_esperar % 3600) // 60
-    #segundos = segundos_para_esperar % 60
+    horas = segundos_para_esperar / 60 / 60
     print(f"Faltam {horas:.2f} horas até a data e hora futuras especificadas em São Paulo.")
     print("Aguardando...")
     time.sleep(segundos_para_esperar)
     print("Espera terminada. O código continuará a execução.")
 else:
-    print("A data e hora futuras especificadas já passaram.")
+    print("Continuando imediatamente pois a data especificada já passou.")
+
 
 """#Início do Cronômetro"""
 

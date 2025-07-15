@@ -1068,11 +1068,17 @@ import requests
 import time
 
 # 1. Configuração
-API_KEY = "sk-ed044b6d1daa4cfa8796da2e07e7744c"
+
+load_dotenv()
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
+if not DEEPSEEK_API_KEY:
+    raise RuntimeError("Chave DEEPSEEK_API_KEY não foi encontrada no arquivo .env")
+
 API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 HEADERS = {
-    "Authorization": f"Bearer {API_KEY}",
+    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
     "Content-Type": "application/json"
 }
 

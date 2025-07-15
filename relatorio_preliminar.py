@@ -242,19 +242,29 @@ def gerar_versao_preliminar(final_df_small_marca, df_resumo_marca, final_df_marc
 
             # Incluir linha com ShortURL e Coluna (se aplicável)
             # Ensure 'ShortURL' column exists in final_df_small_marca
-            short_url = row_small_marca.get('ShortURL', original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')) # Get ShortURL from small DF or fallback to original URL
+            #short_url = row_small_marca.get('ShortURL', original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')) # Get ShortURL from small DF or fallback to original URL
+            short_url = row_small_marca.get('ShortURL')
+            if pd.isna(short_url) or not short_url:
+                short_url = original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')
 
             prefix = "Coluna - " if "Colunistas" in str(canais_commodities) else ""
-            document.add_paragraph(f"{prefix}{short_url}")
+            #document.add_paragraph(f"{prefix}{short_url}")
 
             # Check if it's the last news item for the current brand
             # Check against the sorted DataFrame
             # Ensure we don't go out of bounds
-            if index + 1 < len(final_df_small_marca_sorted):
-                if final_df_small_marca_sorted.iloc[index + 1]['Canais'] == marca:
-                    # If not the last item, add the asterisk line
-                    document.add_paragraph("*")
+            #if index + 1 < len(final_df_small_marca_sorted):
+            #    if final_df_small_marca_sorted.iloc[index + 1]['Canais'] == marca:
+            #        # If not the last item, add the asterisk line
+            #        document.add_paragraph("*")
             # If it is the last item for this brand, the next iteration will add a blank line if needed.
+
+            # Incluir linha com ShortURL e Coluna (se aplicável)
+            document.add_paragraph(f"{prefix}{short_url}")
+
+            # Sempre adicionar uma linha com asterisco após cada item
+            document.add_paragraph("*")
+
     else:
         print("DataFrame 'final_df_small_marca' não encontrado, vazio ou sem a coluna 'Canais'. Pulando a seção de links por Marcas.")
 

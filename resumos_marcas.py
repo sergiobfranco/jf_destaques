@@ -155,19 +155,40 @@ def agrupar_noticias_por_similaridade(arq_textos):
 
             for grupo_id, df_grupo in df_marca.groupby('GrupoID'):
                 textos = df_grupo['TextoCompleto'].tolist()
-                ids = df_grupo['Id'].tolist()
+                ids = df_grupo['Id'].astype(str).tolist()
                 resumo_final = gerar_resumo_consolidado_por_chunks(textos, marca)
                 resultados.append({
                     "Marca": marca,
                     "GrupoID": f"{marca}_G{grupo_id}",
                     "QtdNoticias": len(ids),
-                    "Ids": ','.join(ids),
+                    "Ids": ','.join(ids),  # <-- manter sempre como string separada por vírgula
                     "Resumo": resumo_final
                 })
 
         df_final = pd.DataFrame(resultados)
-        #df_final.to_excel(arq_saida_final, index=False)
-        #print(f"✅ Resumos finais salvos em {arq_saida_final}")
+
+        import pyshorteners  # certifique-se de ter instalado: pip install pyshorteners
+
+        s = pyshorteners.Shortener()
+        short_urls = []
+
+        print("🔗 Gerando ShortURLs para todas as notícias...")
+
+        for _, row in df.iterrows():
+            url = row.get('UrlVisualizacao', '')
+            try:
+                short_url = s.tinyurl.short(url) if url else ''
+            except Exception as e:
+                print(f"⚠️ Erro ao encurtar URL para ID {row['Id']}: {e}")
+                short_url = url
+            short_urls.append(short_url)
+
+        df['ShortURL'] = short_urls
+
+        # Salve um CSV ou Excel com os campos necessários para o relatorio_preliminar.py
+        df[['Id', 'Canais', 'ShortURL']].to_excel('dados/api/shorturls_por_id.xlsx', index=False)
+        print("✅ Arquivo shorturls_por_id.xlsx salvo com ShortURLs.")
+
         return df_final
 
     except Exception as e:

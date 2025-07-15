@@ -2,6 +2,7 @@ import pandas as pd
 import json
 import requests
 import time
+from cronometro import obter_timestamp_brasilia, calcular_tempo_decorrido
 from temporizador import aguardar_data_futura
 from limpeza_marcas import limpar_marcas
 from limpeza_setor import limpar_setor
@@ -13,9 +14,20 @@ from prompts_setor import gerar_prompts_setor
 from resumos_setor import gerar_resumos_setor
 from relatorio_preliminar import gerar_versao_preliminar
 from relatorio_ajustado import gerar_versao_ajustada
-from config import arq_api_original, arq_api, arq_results, arq_results_final, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
-    arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final, arq_resumo_final_ajustado
-#from documentos import gerar_documento
+from config import arq_api_original, arq_api, arq_results, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
+    arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final
+
+def abrir_arquivos_gerados():
+    final_df = pd.read_excel(arq_api_original)
+    final_df_small = pd.read_excel(arq_api)
+    df_resumos_marcas = pd.read_excel(arq_results)
+    final_df_setor = pd.read_excel(arq_api_original_setor)
+    final_df_small_setor = pd.read_excel(arq_api_setor)
+    df_resumos_setor = pd.read_excel(arq_results_setor)
+    final_df_editoriais = pd.read_excel(arq_api_original_editorial)
+    final_df_small_editoriais = pd.read_excel(arq_api_editorial)
+    final_df_specials = pd.read_excel(arq_api_original_SPECIALS)
+    final_df_small_specials = pd.read_excel(arq_api_SPECIALS)
 
 
 def carregar_configs(caminho_json):
@@ -61,12 +73,12 @@ def main():
     final_df, final_df_small_bruto = limpar_marcas(marcas_df)
     final_df.to_excel(arq_api_original, index=False)
 
+
     # 3. Avaliação de RELEVÂNCIA
     final_df_small = avaliar_relevancia(final_df_small_bruto)
     final_df_small.to_excel(arq_api, index=False)
 
     # 4. Agrupa MARCAS por SIMILARIDADE e gera RESUMOS pelo DeepSeek
-    #final_df_small = pd.read_excel(arq_api)
     df_resumos_marcas = agrupar_noticias_por_similaridade(final_df_small)
     df_resumos_marcas.to_excel(arq_results, index=False)
     #raise KeyboardInterrupt("Interrupção manual simulada")
@@ -104,10 +116,27 @@ def main():
     final_df_small_specials.to_excel(arq_api_SPECIALS, index=False)
 
     # 10. Geração do RELATÓRIO DE DESTAQUES
+    abrir_arquivos_gerados()
+    # Ajustes de tipos de campos
+    df_short = pd.read_excel('dados/api/shorturls_por_id.xlsx')
+    final_df_small['Id'] = final_df_small['Id'].astype(int)
+    df_short['Id'] = df_short['Id'].astype(int)
+    final_df_small = final_df_small.merge(df_short, on=['Id', 'Canais'], how='left')
+
     gerar_versao_preliminar(final_df_small, df_resumos_marcas, final_df, df_resumos_setor, final_df_setor, final_df_editoriais, final_df_small_specials )
     
     # 11. Geração da Versão Ajustada do RELATÓRIO DE DESTAQUES
     gerar_versao_ajustada(arq_resumo_final)
 
 if __name__ == "__main__":
+    # Pegar o timestamp atual em Brasília
+    ts = obter_timestamp_brasilia()
+    print("Timestamp atual:", ts)
+
     main()
+
+    # Calcular o tempo decorrido desde aquele timestamp
+    resultado = calcular_tempo_decorrido(ts)
+    print(f"Tempo decorrido: {resultado['segundos']:.2f} segundos")
+    print(f"                  {resultado['minutos']:.2f} minutos")
+    print(f"                  {resultado['horas']:.2f} horas")

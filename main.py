@@ -14,13 +14,15 @@ from prompts_setor import gerar_prompts_setor
 from resumos_setor import gerar_resumos_setor
 from relatorio_preliminar import gerar_versao_preliminar
 from relatorio_ajustado import gerar_versao_ajustada
-from config import arq_api_original, arq_api, arq_results, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
+from config import arq_api_original, arq_api, arq_api_irrelevantes, arq_results, arq_results_irrelevantes, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
     arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final
 
 def abrir_arquivos_gerados():
     final_df = pd.read_excel(arq_api_original)
     final_df_small = pd.read_excel(arq_api)
+    final_df_small_irrelevantes = pd.read_excel(arq_api_irrelevantes)
     df_resumos_marcas = pd.read_excel(arq_results)
+    df_resumos_marcas_irrelevantes = pd.read_excel(arq_results_irrelevantes)
     final_df_setor = pd.read_excel(arq_api_original_setor)
     final_df_small_setor = pd.read_excel(arq_api_setor)
     df_resumos_setor = pd.read_excel(arq_results_setor)
@@ -28,7 +30,6 @@ def abrir_arquivos_gerados():
     final_df_small_editoriais = pd.read_excel(arq_api_editorial)
     final_df_specials = pd.read_excel(arq_api_original_SPECIALS)
     final_df_small_specials = pd.read_excel(arq_api_SPECIALS)
-
 
 def carregar_configs(caminho_json):
     with open(caminho_json, 'r', encoding='utf-8') as f:
@@ -75,13 +76,18 @@ def main():
 
 
     # 3. Avaliação de RELEVÂNCIA
-    final_df_small = avaliar_relevancia(final_df_small_bruto)
+    final_df_small, final_df_small_irrelevantes = avaliar_relevancia(final_df_small_bruto)
     final_df_small.to_excel(arq_api, index=False)
+    final_df_small_irrelevantes.to_excel(arq_api_irrelevantes, index=False)
 
-    # 4. Agrupa MARCAS por SIMILARIDADE e gera RESUMOS pelo DeepSeek
+    # 4.A Agrupa MARCAS por SIMILARIDADE e gera RESUMOS pelo DeepSeek - Notícias Relevantes
     df_resumos_marcas = agrupar_noticias_por_similaridade(final_df_small)
     df_resumos_marcas.to_excel(arq_results, index=False)
     #raise KeyboardInterrupt("Interrupção manual simulada")
+
+    # 4.B Agrupa MARCAS por SIMILARIDADE e gera RESUMOS pelo DeepSeek - Notícias Irrelevantes
+    df_resumos_marcas_irrelevantes = agrupar_noticias_por_similaridade(final_df_small_irrelevantes)
+    df_resumos_marcas_irrelevantes.to_excel(arq_results_irrelevantes, index=False)
 
     # 5. Chamada de API de SETOR
     caminho_json = "dados/api_setor_configs.json"
@@ -116,14 +122,14 @@ def main():
     final_df_small_specials.to_excel(arq_api_SPECIALS, index=False)
 
     # 10. Geração do RELATÓRIO DE DESTAQUES
-    abrir_arquivos_gerados()
+    #abrir_arquivos_gerados()
     # Ajustes de tipos de campos
     df_short = pd.read_excel('dados/api/shorturls_por_id.xlsx')
     final_df_small['Id'] = final_df_small['Id'].astype(int)
     df_short['Id'] = df_short['Id'].astype(int)
     final_df_small = final_df_small.merge(df_short, on=['Id', 'Canais'], how='left')
 
-    gerar_versao_preliminar(final_df_small, df_resumos_marcas, final_df, df_resumos_setor, final_df_setor, final_df_editoriais, final_df_small_specials )
+    gerar_versao_preliminar(final_df_small, final_df_small_irrelevantes, df_resumos_marcas, df_resumos_marcas_irrelevantes, final_df, df_resumos_setor, final_df_setor, final_df_editoriais, final_df_small_specials )
     
     # 11. Geração da Versão Ajustada do RELATÓRIO DE DESTAQUES
     gerar_versao_ajustada(arq_resumo_final)

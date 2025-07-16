@@ -120,7 +120,7 @@ def avaliar_relevancia(df):
             final_df_small_marca.apply(lambda row: (row['Id'], row['Canais']) in ids_canais_to_keep, axis=1)
         ].copy()
 
-        return final_df_small_marca_processed
+        return final_df_small_marca_processed, df_irrelevantes
 
         # Sobrescrever o arquivo Favoritos_Marcas_small.xlsx
         #final_df_small_marca_processed.to_excel(arq_api, index=False)

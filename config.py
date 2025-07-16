@@ -33,6 +33,10 @@ arq_api_original_SPECIALS = os.path.join(pasta_api, favoritos_SPECIALS)
 favoritos_small_marca = "Favoritos_Marcas_small.xlsx"
 arq_api = os.path.join(pasta_api, favoritos_small_marca)
 
+# Arquivo de Favoritos IRRELEVANTES gerado pela API - SMALL
+favoritos_small_irrelevantes = "Favoritos_Marcas_small_irrelevantes.xlsx"
+arq_api_irrelevantes = os.path.join(pasta_api, favoritos_small_irrelevantes)
+
 favoritos_small_setor = "Favoritos_Setor_small.xlsx"
 arq_api_setor = os.path.join(pasta_api, favoritos_small_setor)
 
@@ -63,6 +67,10 @@ arq_prompts_setor = os.path.join(pasta_marca_setor, prompts_setor)
 # Arquivo XLSX de Resultados
 results = "Resumos_Gerados_DeepSeek.xlsx"
 arq_results = os.path.join(pasta_marca_setor, results)
+
+# Arquivo XLSX de Resultados Irrelevantes
+results_irrelevantes = "Resumos_Gerados_DeepSeek_Irrelevantes.xlsx"
+arq_results_irrelevantes = os.path.join(pasta_marca_setor, results_irrelevantes)
 
 results_final = "Resumos_Finais_DeepSeek.xlsx"
 arq_results_final = os.path.join(pasta_marca_setor, results_final)

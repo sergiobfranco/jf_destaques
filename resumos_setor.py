@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 import time
 
-from config import DEEPSEEK_API_URL, DEEPSEEK_API_KEY
+from config import DEEPSEEK_API_URL, DEEPSEEK_API_KEY, w_marcas
 
 HEADERS = {
     "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
@@ -58,5 +58,19 @@ def gerar_resumos_setor(df):
 
     #df_resumo_setor.to_excel(arq_results_setor, index=False)
     #print("Arquivo salvo: ", arq_results_setor)
+
+    # Eliminar asteriscos do resumo final
+    df_resumo_setor['Resumo'] = df_resumo_setor['Resumo'].str.replace('*', '', regex=False)
+
+    # Eliminar linhas que começam e terminam com parênteses e que tenham a palavra "foco"
+    df_resumo_setor = df_resumo_setor[~df_resumo_setor['Resumo'].str.contains(r'^\(.*foco.*\)$', regex=True)]
+
+    # Eliminar do campo Resumo a expressão exata "(90 palavras)"
+    df_resumo_setor['Resumo'] = df_resumo_setor['Resumo'].str.replace(r'\(90 palavras\)', '', regex=True)
+    df_resumo_setor['Resumo'] = df_resumo_setor['Resumo'].str.strip()
+    
+    # Para cada marca que aparece em w_marcas no campo Resumo, acrescentar um asterisco antes e outro depois
+    for marca in w_marcas:
+        df_resumo_setor['Resumo'] = df_resumo_setor['Resumo'].str.replace(f"(?i)\\b{marca}\\b", f"*{marca}*", regex=True)    
 
     return df_resumo_setor

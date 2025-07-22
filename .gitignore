@@ -11,3 +11,12 @@ __pycache__/
 # Arquivos do Excel
 *.xlsx
 *.xls
+
+# Arquivos do Word
+*.docx
+*.doc
+
+# Arquivos de build
+build/
+dist/
+*.egg-info/

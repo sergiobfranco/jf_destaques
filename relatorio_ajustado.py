@@ -2,10 +2,12 @@
 #!pip install python-docx
 
 import re
+import os
 from docx import Document
 from docx.shared import RGBColor
 from docx.oxml.shared import OxmlElement, qn
-from config import arq_resumo_final_ajustado
+#from config import arq_resumo_final_ajustado, arq_resumo_final
+from datetime import datetime
 
 def adicionar_hyperlink(paragraph, url, texto_display):
     """
@@ -294,6 +296,12 @@ def gerar_versao_ajustada(arquivo_entrada):
     """
     # Nomes dos arquivos (ajuste conforme necessário)
     #arquivo_entrada = arq_resumo_final  # Seu arquivo original
+
+    # Gerar novo nome de arquivo com timestamp antes do sufixo .docx
+    base, ext = os.path.splitext(arquivo_entrada)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    arq_resumo_final_ajustado = f"{base}_{timestamp}{ext}"
+ 
     arquivo_saida = arq_resumo_final_ajustado  # Arquivo com hyperlinks
 
     print("🚀 Iniciando conversão de URLs para hyperlinks...")

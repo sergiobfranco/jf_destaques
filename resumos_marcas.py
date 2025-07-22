@@ -5,7 +5,7 @@ import os
 import requests
 import re
 
-from config import DEEPSEEK_API_URL, DEEPSEEK_API_KEY
+from config import DEEPSEEK_API_URL, DEEPSEEK_API_KEY, w_marcas
 
 HEADERS = {
     "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
@@ -188,6 +188,16 @@ def agrupar_noticias_por_similaridade(arq_textos):
         # Salve um CSV ou Excel com os campos necessários para o relatorio_preliminar.py
         df[['Id', 'Canais', 'ShortURL']].to_excel('dados/api/shorturls_por_id.xlsx', index=False)
         print("✅ Arquivo shorturls_por_id.xlsx salvo com ShortURLs.")
+
+        # Eliminar asteriscos do resumo final
+        df_final['Resumo'] = df_final['Resumo'].str.replace('*', '', regex=False)
+
+        # Eliminar linhas que começam e terminam com parênteses e que tenham a palavra "foco"
+        df_final = df_final[~df_final['Resumo'].str.contains(r'^\(.*foco.*\)$', regex=True)]
+
+        # Para cada marca que aparece em w_marcas no campo Resumo, acrescentar um asterisco antes e outro depois
+        for marca in w_marcas:
+            df_final['Resumo'] = df_final['Resumo'].str.replace(f"(?i)\\b{marca}\\b", f"*{marca}*", regex=True) 
 
         return df_final
 

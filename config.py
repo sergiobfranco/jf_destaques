@@ -80,11 +80,12 @@ results_setor = "Resumos_Gerados_DeepSeek_Setor.xlsx"
 arq_results_setor = os.path.join(pasta_marca_setor, results_setor)
 
 # Arquivo DOCX de Resumos
-resumo_final = "Resumo_Marcas.docx"
+#resumo_final = "Resumo_Marcas.docx"
+resumo_final = "Destaques do dia - J&F.docx"
 arq_resumo_final = os.path.join(pasta_marca_setor, resumo_final)
 
-resumo_final_ajustado = "Resumo_Marcas_ajustado.docx"
-arq_resumo_final_ajustado = os.path.join(pasta_marca_setor, resumo_final_ajustado)
+#resumo_final_ajustado = "Resumo_Marcas_ajustado.docx"
+#arq_resumo_final_ajustado = os.path.join(pasta_marca_setor, resumo_final_ajustado)
 
 # Marcas
 w_marcas = ['Holding', 'J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior Friboi', 'J&F Mineração/LHG', 'J&F Mineração/LHG Mining', \

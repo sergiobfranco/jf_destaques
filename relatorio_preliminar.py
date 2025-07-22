@@ -9,6 +9,8 @@ import re
 import time # Importar time para pausa
 from config import arq_resumo_final, marca1, marca2
 import requests
+import os
+from datetime import datetime
 
 def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevantes, df_resumo_marca, df_resumo_marca_irrelevantes, final_df_marca, df_resumo_setor, final_df_setor, final_df_editorial, final_df_SPECIALS_small):
     # 1. Carregar os DataFrames
@@ -400,6 +402,10 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
             document.add_paragraph(short_url_editorial)
             document.add_paragraph("*") # Adicionar linha com asterisco após cada editorial
 
+    # Adicionar uma quebra de linha entre a seção de EDITORIAIS e a seção de RESUMOS DE MARCAS - CITAÇÕES
+    document.add_paragraph("")
+    document.add_paragraph("--- NOTÍCIAS COM CITAÇÕES DAS MARCAS - MENOR EXPOSIÇÃO ---")
+    document.add_paragraph("")
 
     # 99. --- Seção Original para resumos de Marca - NOTÍCIAS IRRELEVANTES ---
     # 3. Iterar sobre df_resumo (Marca)
@@ -585,8 +591,14 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
 
     # 3. Agora salvar o documento processado
+    # Gerar novo nome de arquivo com timestamp antes do sufixo .docx
+    #base, ext = os.path.splitext(arq_resumo_final)
+    #timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #arq_resumo_final_timestamp = f"{base}_{timestamp}{ext}"
     document.save(arq_resumo_final)
 
     # 19. Salvar o documento DOCX
     # document.save(arq_resumo_final) # Já salvo acima
     print(f"Arquivo DOCX salvo em: {arq_resumo_final}")
+
+    #return arq_resumo_final_timestamp  # Retornar o caminho do arquivo salvo para uso posterior

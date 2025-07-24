@@ -4,16 +4,56 @@ import pandas as pd
 import os
 import requests
 import re
+import configparser
+import traceback
 
-from config import DEEPSEEK_API_URL, DEEPSEEK_API_KEY, w_marcas
+from dotenv import load_dotenv
 
-HEADERS = {
-    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-    "Content-Type": "application/json"
-}
+def obter_chave_deepseek():
+    # Caminho absoluto do .env com base no local do script
+    #base_dir = os.path.dirname(os.path.abspath(__file__))
+    #env_path = os.path.join(base_dir, ".env")
+    #load_dotenv(env_path)
+
+    load_dotenv()
+
+    # Caminho correto para o config_usuario.ini em dados/config/
+    config_path = os.path.join("dados", "config", "config_usuario.ini")
+
+    # Debug opcional
+    print(f"🛠️ Lendo config de: {config_path}")
+
+    config = configparser.ConfigParser()
+    config.read(config_path, encoding="utf-8")
+    perfil = config.get("usuario", "perfil", fallback="client").strip().lower()
+
+    env_var = f"DEEPSEEK_API_KEY_{perfil.upper()}"
+    chave = os.getenv(env_var)
+
+    # Diagnóstico
+    print(f"Perfil de usuário: {perfil}")
+    print(f"Variável de ambiente esperada: {env_var}")
+    print(f"Chave encontrada: {chave[:10]}..." if chave else "❌ Nenhuma chave encontrada")
+    # Diagnóstico adicional opcional
+    # traceback.print_stack(limit=2)
+
+    if not chave:
+        raise ValueError(f"Chave de API não encontrada para o perfil '{perfil}' ({env_var}) no arquivo .env")
+    
+    return chave
+
+
+from config import DEEPSEEK_API_URL, w_marcas
+
+
 
 def agrupar_noticias_por_similaridade(arq_textos):
+    api_key = obter_chave_deepseek()
 
+    HEADERS = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
     LIMITE_CARACTERES_GRUPO = 12000
 
     def gerar_resumo_60(texto, id_):

@@ -1,8 +1,47 @@
 import requests
 import pandas as pd
 import os
+import configparser
+import traceback
 
-from config import DEEPSEEK_API_URL, DEEPSEEK_API_KEY
+from dotenv import load_dotenv
+
+def obter_chave_deepseek():
+    # Caminho absoluto do .env com base no local do script
+    #base_dir = os.path.dirname(os.path.abspath(__file__))
+    #env_path = os.path.join(base_dir, ".env")
+    #load_dotenv(env_path)
+
+    load_dotenv()
+    #print(f"🔍 Valor real da variável: {repr(os.getenv('DEEPSEEK_API_KEY_CLIENT'))}")
+
+
+    # Caminho correto para o config_usuario.ini em dados/config/
+    config_path = os.path.join("dados", "config", "config_usuario.ini")
+
+    # Debug opcional
+    print(f"🛠️ Lendo config de: {config_path}")
+
+    config = configparser.ConfigParser()
+    config.read(config_path, encoding="utf-8")
+    perfil = config.get("usuario", "perfil", fallback="client").strip().lower()
+
+    env_var = f"DEEPSEEK_API_KEY_{perfil.upper()}"
+    chave = os.getenv(env_var)
+
+    # Diagnóstico
+    print(f"Perfil de usuário: {perfil}")
+    print(f"Variável de ambiente esperada: {env_var}")
+    print(f"Chave encontrada: {chave[:10]}..." if chave else "❌ Nenhuma chave encontrada")
+    # Diagnóstico adicional opcional
+    # traceback.print_stack(limit=2)
+
+    if not chave:
+        raise ValueError(f"Chave de API não encontrada para o perfil '{perfil}' ({env_var}) no arquivo .env")
+    
+    return chave
+
+from config import DEEPSEEK_API_URL
 
 def avaliar_relevancia(df):
     PROMPT_CHARACTER_LIMIT = 30000
@@ -11,9 +50,11 @@ def avaliar_relevancia(df):
     #darq_relevancia_irrelevantes = 'api/Favoritos_Marcas_Irrelevantes.xlsx' # Esta variável não será mais usada para salvar o arquivo
     #arq_prompts = 'marca_setor/Prompts_Resumo_Noticias_DBSCAN.xlsx'
 
+    api_key = obter_chave_deepseek()
+
     HEADERS = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+        "Authorization": f"Bearer {api_key}"
     }
 
     # Carregamento inicial

@@ -1,8 +1,20 @@
+import os
+import sys
+from dotenv import load_dotenv
+
+# Detectar base_dir mesmo dentro do .exe
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+env_path = os.path.join(base_dir, ".env")
+load_dotenv(env_path)
+
 import pandas as pd
 import json
 import requests
 import time
-import os
 from cronometro import obter_timestamp_brasilia, calcular_tempo_decorrido
 from temporizador import aguardar_data_futura
 from limpeza_marcas import limpar_marcas
@@ -40,7 +52,7 @@ def carregar_configs(caminho_json):
     with open(caminho_json, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def consultar_apis(configs):
+def consultar_apis(configs, max_tentativas=5):
     lista_df = []
     for config in configs:
         url = config.get("url")

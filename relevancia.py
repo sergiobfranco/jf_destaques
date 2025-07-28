@@ -13,8 +13,6 @@ def obter_chave_deepseek():
     #load_dotenv(env_path)
 
     load_dotenv()
-    #print(f"🔍 Valor real da variável: {repr(os.getenv('DEEPSEEK_API_KEY_CLIENT'))}")
-
 
     # Caminho correto para o config_usuario.ini em dados/config/
     config_path = os.path.join("dados", "config", "config_usuario.ini")

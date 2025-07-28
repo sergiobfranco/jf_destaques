@@ -111,9 +111,9 @@ def agrupar_noticias_por_similaridade(arq_textos):
             print(f"Erro ao agrupar resumos: {e}")
             return list(range(len(resumos)))
 
-    def gerar_resumo_160(textos, marca):
+    def gerar_resumo_120(textos, marca):
         corpo = "\n--- NOTÍCIA ---\n".join(textos)
-        prompt = f"Gere um resumo único de até 160 palavras para as notícias a seguir sobre a marca '{marca}', destacando os fatos mais importantes:\n\n{corpo}"
+        prompt = f"Gere um resumo único de até 120 palavras para as notícias a seguir sobre a marca '{marca}', destacando os fatos mais importantes:\n\n{corpo}"
         data = {
             "model": "deepseek-chat",
             "messages": [{"role": "user", "content": prompt}],
@@ -143,8 +143,8 @@ def agrupar_noticias_por_similaridade(arq_textos):
             # Remover outros prefixos do tipo "** ... **" no início do texto (versão mais específica)
             texto = re.sub(r"^\*\*[^*]*\*\*\s*", "", texto, flags=re.IGNORECASE | re.MULTILINE)
 
-            # Remover sufixos do tipo "*160 palavras*" ou "*Exatamente 160 palavras*"
-            texto = re.sub(r"\*\(Exatamente\s*160\s*palavras\)\*|\*\(160\s*palavras\)\*", "", texto, flags=re.IGNORECASE)
+            # Remover sufixos do tipo "*120 palavras*" ou "*Exatamente 120 palavras*"
+            texto = re.sub(r"\*\(Exatamente\s*120\s*palavras\)\*|\*\(120\s*palavras\)\*", "", texto, flags=re.IGNORECASE)
 
             # Remover múltiplas linhas em branco
             texto = re.sub(r"(\n\s*)+", "\n", texto.strip())
@@ -168,12 +168,12 @@ def agrupar_noticias_por_similaridade(arq_textos):
         if grupo_atual:
             grupos.append(grupo_atual)
 
-        resumos_intermediarios = [gerar_resumo_160(grupo, marca) for grupo in grupos]
+        resumos_intermediarios = [gerar_resumo_120(grupo, marca) for grupo in grupos]
         if len(resumos_intermediarios) == 1:
             return resumos_intermediarios[0]
         else:
             print("🔗 Consolidando subgrupos em resumo final...")
-            return gerar_resumo_160(resumos_intermediarios, marca)
+            return gerar_resumo_120(resumos_intermediarios, marca)
 
     try:
         df = arq_textos

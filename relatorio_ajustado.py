@@ -141,6 +141,16 @@ def converter_urls_docx_para_hyperlinks(arquivo_entrada, arquivo_saida):
         print(f"💾 Salvando arquivo: {arquivo_saida}")
         doc.save(arquivo_saida)
 
+        # Copiar para o Google Drive
+        pasta_drive = r'G:\Meu Drive\JF\Destaques do dia'  # Altere para o caminho da sua pasta do Drive
+        if os.path.isdir(pasta_drive):
+            import shutil
+            destino_drive = os.path.join(pasta_drive, os.path.basename(arquivo_saida))
+            shutil.copy2(arquivo_saida, destino_drive)
+            print(f"📁 Arquivo também salvo em: {destino_drive}")
+        else:
+            print(f"⚠️ Pasta do Google Drive não encontrada: {pasta_drive}")
+
         print(f"\n✅ Conversão concluída com sucesso!")
         print(f"📊 Estatísticas:")
         print(f"   - Parágrafos processados: {paragrafos_processados}")
@@ -251,6 +261,16 @@ def metodo_alternativo_melhorado(arquivo_entrada, arquivo_saida):
         # Salvar documento
         doc.save(arquivo_saida)
 
+        # Copiar para o Google Drive
+        pasta_drive = r'G:\Meu Drive\JF\Destaques do dia'  # Altere para o caminho da sua pasta do Drive
+        if os.path.isdir(pasta_drive):
+            import shutil
+            destino_drive = os.path.join(pasta_drive, os.path.basename(arquivo_saida))
+            shutil.copy2(arquivo_saida, destino_drive)
+            print(f"📁 Arquivo também salvo em: {destino_drive}")
+        else:
+            print(f"⚠️ Pasta do Google Drive não encontrada: {pasta_drive}")
+            
         print(f"\n✅ Método alternativo concluído!")
         print(f"📊 Estatísticas:")
         print(f"   - Parágrafos processados: {paragrafos_processados}")

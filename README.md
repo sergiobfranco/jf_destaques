@@ -10,8 +10,12 @@
 ## Arquivo de inicialização
 - Editar o arquivo de inicialização \dados\config\config_usuario.ini
 - Preencher o identificador perfil **exatamente com o complemento que foi criado no arquivo .env após o prefixo "DEEPSEEK_API_KEY_"**.
-# Geração de executável
+## Geração de executável
 rmdir /s /q build
 rmdir /s /q dist
 pyinstaller --onefile --hidden-import=pyshorteners --hidden-import=pyshorteners.shorteners --hidden-import=pyshorteners.shorteners.tinyurl main.py
-
+# Comandos git
+- git add .
+- git add nome_do_arquivo.py
+- git commit -m "Mensagem descritiva do que você fez"
+- git push

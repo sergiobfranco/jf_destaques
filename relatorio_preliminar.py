@@ -43,6 +43,11 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
 
+    # Adicionar título e linha em branco
+    document.add_paragraph("DESTAQUES DO DIA J&F")
+    document.add_paragraph("")
+    document.add_paragraph("--- NOTÍCIAS DE MARCAS ---")
+    document.add_paragraph("")
 
     # --- Seção Original para resumos de Marca ---
     # 3. Iterar sobre df_resumo (Marca)
@@ -210,7 +215,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
         # Adicionar uma quebra de linha entre a seção de Setor e a seção de links de Marca (se houver links de Marca)
         document.add_paragraph("")
-        document.add_paragraph("--- Links das Notícias de Marca ---") # Opcional: um título para a seção de links
+        document.add_paragraph("--- LINKS DAS NOTÍCIAS DE MARCA ---") # Opcional: um título para a seção de links
         document.add_paragraph("")
 
         current_marca = None  # Inicializar variável para controlar a marca atual
@@ -270,6 +275,236 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
     else:
         print("DataFrame 'final_df_small_marca' não encontrado, vazio ou sem a coluna 'Canais'. Pulando a seção de links por Marcas.")
 
+    # 99. --- Seção Original para resumos de Marca - NOTÍCIAS IRRELEVANTES ---
+    # 3. Iterar sobre df_resumo (Marca)
+
+    document.add_paragraph("")
+    document.add_paragraph("--- NOTÍCIAS DE MARCA COM CITAÇÕES - MENOR EXPOSIÇÃO---") # Opcional: um título para a seção de links
+    document.add_paragraph("")
+    
+    print(f"Processando {len(df_resumo_marca_irrelevantes)} resumos de Marca - CITAÇÕES ...") # Debug print
+    for index, row_marca in df_resumo_marca_irrelevantes.iterrows(): # Renomeado para clareza
+        # Inicializar a string para cada grupo de notícias
+        group_string = ""
+
+        # 4. Iterar sobre os IDs das notícias (Marca)
+        # Check if 'Ids' column exists and is not None
+        if 'Ids' not in row_marca or pd.isna(row_marca['Ids']):
+            print(f"Aviso: Linha {index} no df_resumo_marca_irrelevantes não tem IDs válidos. Pulando.")
+            continue
+
+        for news_id_str in str(row_marca['Ids']).split(','): # Ensure it's a string
+            try:
+                news_id = int(news_id_str.strip())  # Convert to integer, strip whitespace
+            except ValueError:
+                print(f"Aviso: Não foi possível converter ID '{news_id_str}' para inteiro na linha {index} de df_resumo_marca. Pulando.")
+                continue # Skip this ID if not a valid number
+
+
+            # 5. Consultar informações no final_df_marca
+            # Use final_df_marca for original info (like Veiculo, UrlVisualizacao, CanaisCommodities)
+            news_info_marca = final_df_marca[final_df_marca['Id'] == news_id]
+            if news_info_marca.empty:
+                print(f"Aviso: ID {news_id} não encontrado em final_df_marca para resumo de Marca. Pulando.")
+                continue # Skip this news if not found
+
+            news_info_marca = news_info_marca.iloc[0]
+
+            w_veiculo_marca = news_info_marca['Veiculo']
+            w_url_marca = news_info_marca['UrlVisualizacao']
+            #w_canais_commodities_marca = news_info_marca['CanaisCommodities'] # Obter CanaisCommodities (se disponível)
+
+
+            # 6. Encurtar a URL
+            s = pyshorteners.Shortener()
+            retries = 3  # Number of retries
+            short_url_marca = w_url_marca # Inicializa com a URL original
+            for i in range(retries):
+                try:
+                    short_url_marca = s.tinyurl.short(w_url_marca)
+                    break  # Exit the loop if successful
+                except requests.exceptions.RequestException as e:
+                    # Check if the error is due to a redirect or other network issue
+                    if "Read timed out" in str(e) or "connection" in str(e) or "Max retries exceeded" in str(e):
+                        print(f"Erro de conexão/timeout ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
+                    else:
+                        print(f"Erro ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
+
+                    if i < retries - 1:
+                        time.sleep(2)  # Wait before retrying
+                    else:
+                        print(f"Falha ao encurtar URL para Marca ID {news_id} após {retries} tentativas. Usando URL original.")
+                        short_url_marca = w_url_marca # Use original URL if all retries fail
+
+
+            # **Atualizar o DataFrame arq_api** (Atualiza final_df_small_marca_irrelevantes)
+            # Certifica-se de que a linha existe antes de tentar atualizar
+            if news_id in final_df_small_marca_irrelevantes['Id'].values:
+                final_df_small_marca_irrelevantes.loc[final_df_small_marca_irrelevantes['Id'] == news_id, 'ShortURL'] = short_url_marca
+            else:
+                # This might happen if the small DF was filtered differently or not generated correctly
+                print(f"Aviso: ID {news_id} não encontrado em final_df_small_marca_irrelevantes para adicionar ShortURL. Ignorando atualização do ShortURL neste DF.")
+                # Optionally, add the news info to final_df_small_marca if it's missing
+                # new_row = news_info_marca.copy()
+                # new_row['ShortURL'] = short_url_marca
+                # final_df_small_marca = pd.concat([final_df_small_marca, pd.DataFrame([new_row])], ignore_index=True)
+
+
+            # 7. Criar a string formatada
+
+            # Incluir trecho de código para identificar o tipo "Special"
+            special_type = ""
+            # Busca o Id no final_df_SPECIALS_small
+            special_info = final_df_SPECIALS_small[final_df_SPECIALS_small['Id'] == news_id]
+
+            if not special_info.empty:
+                # Se encontrar, verifica o campo Canais
+                # Certifica-se de que 'Canais' é uma lista ou string e a processa
+                canais_special = special_info.iloc[0]['Canais']
+                if isinstance(canais_special, list):
+                    canais_str = ', '.join(map(str, canais_special)) # Converte lista para string
+                else:
+                    canais_str = str(canais_special) # Garante que é string
+
+
+                if "Editoriais" in canais_str:
+                    special_type = "Editorial"
+                elif "Colunistas" in canais_str:
+                    special_type = "Colunista"
+                elif "1ª Página" in canais_str:
+                    special_type = "Capa"
+                # Se não contiver nenhuma das strings acima, special_type permanece ""
+
+            # Formata a string incluindo o tipo "Special" se encontrado
+            if special_type:
+                group_string += f"{w_veiculo_marca} ({special_type} - {short_url_marca}), "
+            else:
+                group_string += f"{w_veiculo_marca} ({short_url_marca}), "
+
+
+        # 8. Limpar e adicionar o resumo à string
+        # Remover a última vírgula e espaço da string de veículos/urls
+        group_string = group_string.rstrip(', ')
+        group_string += "\n" # Adicionar quebra de linha antes do resumo
+
+        # Check if 'Resumo' column exists and is not None
+        if 'Resumo' not in row_marca or pd.isna(row_marca['Resumo']):
+            print(f"Aviso: Linha {index} no df_resumo_marca_irrelevantes não tem Resumo. Adicionando placeholder.")
+            resumo_limpo = "[Resumo não disponível]"
+        else:
+            resumo_limpo = str(row_marca['Resumo']) # Ensure it's string first
+            # Remove the specific string and strip whitespace - This is handled in the final processing step now
+            # resumo_limpo = resumo_limpo.replace("(160 palavras)", "").strip()
+
+
+        group_string += resumo_limpo
+
+        # 9. Adicionar a string ao documento DOCX
+        document.add_paragraph(group_string)
+        document.add_paragraph("")  # Adicionar linha em branco
+
+    # 100. Imprimir os links das notícias por Marcas IRRELEVANTES
+
+    # Create custom order for iteration (Certifique-se que w_marcas, marca1 e marca2 estão definidos)
+    # Use a ordem definida no seu código original, garantindo que as variáveis existam
+    # Exemplo:
+    # w_marcas = ['Holding', 'J&F', 'JBS', ...]
+    # marca1 = 'J&F'
+    # marca2 = 'JBS'
+    # order = [marca1, marca2] + [marca for marca in final_df_small_marca['Canais'].unique() if marca not in (marca1, marca2)]
+
+    # Use a ordenação do seu código original aqui
+    # final_df_small_marca_sorted = final_df_small_marca.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
+
+    # Para evitar dependência de variáveis externas complexas para esta demonstração,
+    # vamos apenas ordenar por Canais para demonstrar a estrutura.
+    # Use a ordenação real do seu código original no seu notebook.
+    # Verifica se final_df_small_marca existe e tem a coluna 'Canais' antes de tentar usá-lo
+
+    # DEBUG: Check final_df_small_marca before sorting
+    print(f"\nVerificando final_df_small_marca_irrelevantes antes de ordenar para links:")
+    print(f"  Tem {len(final_df_small_marca_irrelevantes)} linhas.")
+    print(f"  Tem coluna 'Canais'? {'Canais' in final_df_small_marca_irrelevantes.columns}")
+
+    if not final_df_small_marca_irrelevantes.empty and 'Canais' in final_df_small_marca_irrelevantes.columns:
+        # Sort the DataFrame
+        # Assuming you still want the specific order defined by marca1, marca2, w_marcas
+        # Ensure marca1, marca2, w_marcas are defined before this block
+        # If not, a simple sort_values('Canais') will work but might not match your desired order
+        try:
+            # Attempt the custom sort if order is defined
+            # Ensure marca1, marca2, w_marcas are accessible here (defined earlier in the notebook)
+            order = [marca1, marca2] + [marca for marca in final_df_small_marca_irrelevantes['Canais'].unique() if marca not in (marca1, marca2)]
+            final_df_small_marca_sorted = final_df_small_marca_irrelevantes.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
+            print("Ordenação personalizada dos links por Marca aplicada.")
+        except (NameError, KeyError, AttributeError) as e:
+            print(f"Aviso: Falha na ordenação personalizada dos links por Marca ({type(e).__name__}: {e}). Verifique se marca1, marca2 e w_marcas estão definidos corretamente.")
+            print("Ordenando por Canais padrão.")
+            final_df_small_marca_sorted = final_df_small_marca_irrelevantes.sort_values(by=['Canais'])
+
+
+        # Adicionar uma quebra de linha entre a seção de Setor e a seção de links de Marca (se houver links de Marca)
+        document.add_paragraph("")
+        document.add_paragraph("--- LINKS DAS NOTÍCIAS DE MARCA COM CITAÇÕES - MENOR EXPOSIÇÃO ---") # Opcional: um título para a seção de links
+        document.add_paragraph("")
+
+        current_marca = None  # Inicializar variável para controlar a marca atual
+
+        for index, row_small_marca in final_df_small_marca_sorted.iterrows(): # Use the sorted DataFrame
+            marca = row_small_marca['Canais']
+            if marca != current_marca:  # Verificar se a marca mudou
+                if current_marca is not None:  # Add blank line if not the first brand
+                    document.add_paragraph("")
+                document.add_paragraph(f"*{marca}*")  # Incluir nome da marca
+                current_marca = marca
+
+            # Obter informações do final_df_marca (original dataframe) para Veiculo, Titulo, CanaisCommodities
+            # Assumindo que final_df_marca e final_df_small_marca compartilham o mesmo 'Id'
+            news_id_small = row_small_marca['Id']
+            original_row_marca = final_df_marca[final_df_marca['Id'] == news_id_small]
+            if original_row_marca.empty:
+                print(f"Aviso: ID {news_id_small} não encontrado em final_df_marca para links de Marca. Pulando este link.")
+                continue # Skip this link if original info not found
+
+            original_row_marca = original_row_marca.iloc[0]
+
+            veiculo = original_row_marca['Veiculo']
+            titulo = original_row_marca['Titulo'] # Use titulo from original df
+            # Verifique se 'CanaisCommodities' existe no seu final_df_marca
+            canais_commodities = original_row_marca.get('CanaisCommodities', '') # Usa .get para evitar erro se a coluna não existir
+
+
+            # Incluir linha com Veiculo e Titulo
+            document.add_paragraph(f"{veiculo}: {titulo}") # Use 'titulo' variable
+
+            # Incluir linha com ShortURL e Coluna (se aplicável)
+            # Ensure 'ShortURL' column exists in final_df_small_marca
+            #short_url = row_small_marca.get('ShortURL', original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')) # Get ShortURL from small DF or fallback to original URL
+            short_url = row_small_marca.get('ShortURL')
+            if pd.isna(short_url) or not short_url:
+                short_url = original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')
+
+            prefix = "Coluna - " if "Colunistas" in str(canais_commodities) else ""
+            #document.add_paragraph(f"{prefix}{short_url}")
+
+            # Check if it's the last news item for the current brand
+            # Check against the sorted DataFrame
+            # Ensure we don't go out of bounds
+            #if index + 1 < len(final_df_small_marca_sorted):
+            #    if final_df_small_marca_sorted.iloc[index + 1]['Canais'] == marca:
+            #        # If not the last item, add the asterisk line
+            #        document.add_paragraph("*")
+            # If it is the last item for this brand, the next iteration will add a blank line if needed.
+
+            # Incluir linha com ShortURL e Coluna (se aplicável)
+            document.add_paragraph(f"{prefix}{short_url}")
+
+            # Sempre adicionar uma linha com asterisco após cada item
+            document.add_paragraph("*")
+
+    else:
+        print("DataFrame 'final_df_small_marca_small' não encontrado, vazio ou sem a coluna 'Canais'. Pulando a seção de links por Marcas.")
+
 
     # --- Novo Passo: Incluir resumos do Setor ---
     # DEBUG: Check if df_resumo_setor is populated
@@ -278,7 +513,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
     print(f"  Está vazio? {df_resumo_setor.empty}")
     if not df_resumo_setor.empty:
         document.add_paragraph("")
-        document.add_paragraph("--- Notícias de Setor ---") # Opcional: um título para a seção de setor
+        document.add_paragraph("--- NOTÍCIAS DE SETOR ---") # Opcional: um título para a seção de setor
         document.add_paragraph("")
 
 
@@ -402,133 +637,6 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
             document.add_paragraph(short_url_editorial)
             document.add_paragraph("*") # Adicionar linha com asterisco após cada editorial
 
-    # Adicionar uma quebra de linha entre a seção de EDITORIAIS e a seção de RESUMOS DE MARCAS - CITAÇÕES
-    document.add_paragraph("")
-    document.add_paragraph("--- NOTÍCIAS COM CITAÇÕES DAS MARCAS - MENOR EXPOSIÇÃO ---")
-    document.add_paragraph("")
-
-    # 99. --- Seção Original para resumos de Marca - NOTÍCIAS IRRELEVANTES ---
-    # 3. Iterar sobre df_resumo (Marca)
-    print(f"Processando {len(df_resumo_marca_irrelevantes)} resumos de Marca - CITAÇÕES ...") # Debug print
-    for index, row_marca in df_resumo_marca_irrelevantes.iterrows(): # Renomeado para clareza
-        # Inicializar a string para cada grupo de notícias
-        group_string = ""
-
-        # 4. Iterar sobre os IDs das notícias (Marca)
-        # Check if 'Ids' column exists and is not None
-        if 'Ids' not in row_marca or pd.isna(row_marca['Ids']):
-            print(f"Aviso: Linha {index} no df_resumo_marca_irrelevantes não tem IDs válidos. Pulando.")
-            continue
-
-        for news_id_str in str(row_marca['Ids']).split(','): # Ensure it's a string
-            try:
-                news_id = int(news_id_str.strip())  # Convert to integer, strip whitespace
-            except ValueError:
-                print(f"Aviso: Não foi possível converter ID '{news_id_str}' para inteiro na linha {index} de df_resumo_marca. Pulando.")
-                continue # Skip this ID if not a valid number
-
-
-            # 5. Consultar informações no final_df_marca
-            # Use final_df_marca for original info (like Veiculo, UrlVisualizacao, CanaisCommodities)
-            news_info_marca = final_df_marca[final_df_marca['Id'] == news_id]
-            if news_info_marca.empty:
-                print(f"Aviso: ID {news_id} não encontrado em final_df_marca para resumo de Marca. Pulando.")
-                continue # Skip this news if not found
-
-            news_info_marca = news_info_marca.iloc[0]
-
-            w_veiculo_marca = news_info_marca['Veiculo']
-            w_url_marca = news_info_marca['UrlVisualizacao']
-            #w_canais_commodities_marca = news_info_marca['CanaisCommodities'] # Obter CanaisCommodities (se disponível)
-
-
-            # 6. Encurtar a URL
-            s = pyshorteners.Shortener()
-            retries = 3  # Number of retries
-            short_url_marca = w_url_marca # Inicializa com a URL original
-            for i in range(retries):
-                try:
-                    short_url_marca = s.tinyurl.short(w_url_marca)
-                    break  # Exit the loop if successful
-                except requests.exceptions.RequestException as e:
-                    # Check if the error is due to a redirect or other network issue
-                    if "Read timed out" in str(e) or "connection" in str(e) or "Max retries exceeded" in str(e):
-                        print(f"Erro de conexão/timeout ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
-                    else:
-                        print(f"Erro ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
-
-                    if i < retries - 1:
-                        time.sleep(2)  # Wait before retrying
-                    else:
-                        print(f"Falha ao encurtar URL para Marca ID {news_id} após {retries} tentativas. Usando URL original.")
-                        short_url_marca = w_url_marca # Use original URL if all retries fail
-
-
-            # **Atualizar o DataFrame arq_api** (Atualiza final_df_small_marca_irrelevantes)
-            # Certifica-se de que a linha existe antes de tentar atualizar
-            if news_id in final_df_small_marca_irrelevantes['Id'].values:
-                final_df_small_marca_irrelevantes.loc[final_df_small_marca_irrelevantes['Id'] == news_id, 'ShortURL'] = short_url_marca
-            else:
-                # This might happen if the small DF was filtered differently or not generated correctly
-                print(f"Aviso: ID {news_id} não encontrado em final_df_small_marca_irrelevantes para adicionar ShortURL. Ignorando atualização do ShortURL neste DF.")
-                # Optionally, add the news info to final_df_small_marca if it's missing
-                # new_row = news_info_marca.copy()
-                # new_row['ShortURL'] = short_url_marca
-                # final_df_small_marca = pd.concat([final_df_small_marca, pd.DataFrame([new_row])], ignore_index=True)
-
-
-            # 7. Criar a string formatada
-
-            # Incluir trecho de código para identificar o tipo "Special"
-            special_type = ""
-            # Busca o Id no final_df_SPECIALS_small
-            special_info = final_df_SPECIALS_small[final_df_SPECIALS_small['Id'] == news_id]
-
-            if not special_info.empty:
-                # Se encontrar, verifica o campo Canais
-                # Certifica-se de que 'Canais' é uma lista ou string e a processa
-                canais_special = special_info.iloc[0]['Canais']
-                if isinstance(canais_special, list):
-                    canais_str = ', '.join(map(str, canais_special)) # Converte lista para string
-                else:
-                    canais_str = str(canais_special) # Garante que é string
-
-
-                if "Editoriais" in canais_str:
-                    special_type = "Editorial"
-                elif "Colunistas" in canais_str:
-                    special_type = "Colunista"
-                elif "1ª Página" in canais_str:
-                    special_type = "Capa"
-                # Se não contiver nenhuma das strings acima, special_type permanece ""
-
-            # Formata a string incluindo o tipo "Special" se encontrado
-            if special_type:
-                group_string += f"{w_veiculo_marca} ({special_type} - {short_url_marca}), "
-            else:
-                group_string += f"{w_veiculo_marca} ({short_url_marca}), "
-
-
-        # 8. Limpar e adicionar o resumo à string
-        # Remover a última vírgula e espaço da string de veículos/urls
-        group_string = group_string.rstrip(', ')
-        group_string += "\n" # Adicionar quebra de linha antes do resumo
-
-        # Check if 'Resumo' column exists and is not None
-        if 'Resumo' not in row_marca or pd.isna(row_marca['Resumo']):
-            print(f"Aviso: Linha {index} no df_resumo_marca_irrelevantes não tem Resumo. Adicionando placeholder.")
-            resumo_limpo = "[Resumo não disponível]"
-        else:
-            resumo_limpo = str(row_marca['Resumo']) # Ensure it's string first
-            # Remove the specific string and strip whitespace - This is handled in the final processing step now
-            # resumo_limpo = resumo_limpo.replace("(160 palavras)", "").strip()
-
-
-        group_string += resumo_limpo
-
-        # 9. Adicionar a string ao documento DOCX
-        document.add_paragraph(group_string)
-        document.add_paragraph("")  # Adicionar linha em branco
 
 
     # ===== PROCESSAMENTO DO DOCUMENTO ANTES DA GRAVAÇÃO =====

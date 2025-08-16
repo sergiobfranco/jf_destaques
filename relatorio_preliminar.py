@@ -173,113 +173,13 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
         document.add_paragraph("")  # Adicionar linha em branco
 
 
-    # 17. Imprimir os links das notícias por Marcas (Esta parte parece ser um passo separado no seu fluxo original, mantido aqui após a seção de resumos)
 
-    # Create custom order for iteration (Certifique-se que w_marcas, marca1 e marca2 estão definidos)
-    # Use a ordem definida no seu código original, garantindo que as variáveis existam
-    # Exemplo:
-    # w_marcas = ['Holding', 'J&F', 'JBS', ...]
-    # marca1 = 'J&F'
-    # marca2 = 'JBS'
-    # order = [marca1, marca2] + [marca for marca in final_df_small_marca['Canais'].unique() if marca not in (marca1, marca2)]
-
-    # Use a ordenação do seu código original aqui
-    # final_df_small_marca_sorted = final_df_small_marca.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
-
-    # Para evitar dependência de variáveis externas complexas para esta demonstração,
-    # vamos apenas ordenar por Canais para demonstrar a estrutura.
-    # Use a ordenação real do seu código original no seu notebook.
-    # Verifica se final_df_small_marca existe e tem a coluna 'Canais' antes de tentar usá-lo
-
-    # DEBUG: Check final_df_small_marca before sorting
-    print(f"\nVerificando final_df_small_marca antes de ordenar para links:")
-    print(f"  Tem {len(final_df_small_marca)} linhas.")
-    print(f"  Tem coluna 'Canais'? {'Canais' in final_df_small_marca.columns}")
-
-    if not final_df_small_marca.empty and 'Canais' in final_df_small_marca.columns:
-        # Sort the DataFrame
-        # Assuming you still want the specific order defined by marca1, marca2, w_marcas
-        # Ensure marca1, marca2, w_marcas are defined before this block
-        # If not, a simple sort_values('Canais') will work but might not match your desired order
-        try:
-            # Attempt the custom sort if order is defined
-            # Ensure marca1, marca2, w_marcas are accessible here (defined earlier in the notebook)
-            order = [marca1, marca2] + [marca for marca in final_df_small_marca['Canais'].unique() if marca not in (marca1, marca2)]
-            final_df_small_marca_sorted = final_df_small_marca.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
-            print("Ordenação personalizada dos links por Marca aplicada.")
-        except (NameError, KeyError, AttributeError) as e:
-            print(f"Aviso: Falha na ordenação personalizada dos links por Marca ({type(e).__name__}: {e}). Verifique se marca1, marca2 e w_marcas estão definidos corretamente.")
-            print("Ordenando por Canais padrão.")
-            final_df_small_marca_sorted = final_df_small_marca.sort_values(by=['Canais'])
-
-
-        # Adicionar uma quebra de linha entre a seção de Setor e a seção de links de Marca (se houver links de Marca)
-        document.add_paragraph("")
-        document.add_paragraph("--- LINKS DAS NOTÍCIAS DE MARCA ---") # Opcional: um título para a seção de links
-        document.add_paragraph("")
-
-        current_marca = None  # Inicializar variável para controlar a marca atual
-
-        for index, row_small_marca in final_df_small_marca_sorted.iterrows(): # Use the sorted DataFrame
-            marca = row_small_marca['Canais']
-            if marca != current_marca:  # Verificar se a marca mudou
-                if current_marca is not None:  # Add blank line if not the first brand
-                    document.add_paragraph("")
-                document.add_paragraph(f"*{marca}*")  # Incluir nome da marca
-                current_marca = marca
-
-            # Obter informações do final_df_marca (original dataframe) para Veiculo, Titulo, CanaisCommodities
-            # Assumindo que final_df_marca e final_df_small_marca compartilham o mesmo 'Id'
-            news_id_small = row_small_marca['Id']
-            original_row_marca = final_df_marca[final_df_marca['Id'] == news_id_small]
-            if original_row_marca.empty:
-                print(f"Aviso: ID {news_id_small} não encontrado em final_df_marca para links de Marca. Pulando este link.")
-                continue # Skip this link if original info not found
-
-            original_row_marca = original_row_marca.iloc[0]
-
-            veiculo = original_row_marca['Veiculo']
-            titulo = original_row_marca['Titulo'] # Use titulo from original df
-            # Verifique se 'CanaisCommodities' existe no seu final_df_marca
-            canais_commodities = original_row_marca.get('CanaisCommodities', '') # Usa .get para evitar erro se a coluna não existir
-
-
-            # Incluir linha com Veiculo e Titulo
-            document.add_paragraph(f"{veiculo}: {titulo}") # Use 'titulo' variable
-
-            # Incluir linha com ShortURL e Coluna (se aplicável)
-            # Ensure 'ShortURL' column exists in final_df_small_marca
-            #short_url = row_small_marca.get('ShortURL', original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')) # Get ShortURL from small DF or fallback to original URL
-            short_url = row_small_marca.get('ShortURL')
-            if pd.isna(short_url) or not short_url:
-                short_url = original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')
-
-            prefix = "Coluna - " if "Colunistas" in str(canais_commodities) else ""
-            #document.add_paragraph(f"{prefix}{short_url}")
-
-            # Check if it's the last news item for the current brand
-            # Check against the sorted DataFrame
-            # Ensure we don't go out of bounds
-            #if index + 1 < len(final_df_small_marca_sorted):
-            #    if final_df_small_marca_sorted.iloc[index + 1]['Canais'] == marca:
-            #        # If not the last item, add the asterisk line
-            #        document.add_paragraph("*")
-            # If it is the last item for this brand, the next iteration will add a blank line if needed.
-
-            # Incluir linha com ShortURL e Coluna (se aplicável)
-            document.add_paragraph(f"{prefix}{short_url}")
-
-            # Sempre adicionar uma linha com asterisco após cada item
-            document.add_paragraph("*")
-
-    else:
-        print("DataFrame 'final_df_small_marca' não encontrado, vazio ou sem a coluna 'Canais'. Pulando a seção de links por Marcas.")
 
     # 99. --- Seção Original para resumos de Marca - NOTÍCIAS IRRELEVANTES ---
     # 3. Iterar sobre df_resumo (Marca)
 
     document.add_paragraph("")
-    document.add_paragraph("--- NOTÍCIAS DE MARCA COM CITAÇÕES - MENOR EXPOSIÇÃO---") # Opcional: um título para a seção de links
+    document.add_paragraph("--- CITAÇÕES ---") # Opcional: um título para a seção de links
     document.add_paragraph("")
     
     print(f"Processando {len(df_resumo_marca_irrelevantes)} resumos de Marca - CITAÇÕES ...") # Debug print
@@ -403,107 +303,75 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
         document.add_paragraph(group_string)
         document.add_paragraph("")  # Adicionar linha em branco
 
-    # 100. Imprimir os links das notícias por Marcas IRRELEVANTES
 
-    # Create custom order for iteration (Certifique-se que w_marcas, marca1 e marca2 estão definidos)
-    # Use a ordem definida no seu código original, garantindo que as variáveis existam
-    # Exemplo:
-    # w_marcas = ['Holding', 'J&F', 'JBS', ...]
-    # marca1 = 'J&F'
-    # marca2 = 'JBS'
-    # order = [marca1, marca2] + [marca for marca in final_df_small_marca['Canais'].unique() if marca not in (marca1, marca2)]
+    # --- Fim da Seção Original para resumos de Marca - NOTÍCIAS IRRELEVANTES ---
 
-    # Use a ordenação do seu código original aqui
-    # final_df_small_marca_sorted = final_df_small_marca.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
+    # --- Início da seção links das notícias por Marcas ---
+    # Juntar os dois dataframes de notícias de marca (relevantes e irrelevantes)
+    final_df_small_marca_combined = pd.concat([final_df_small_marca, final_df_small_marca_irrelevantes], ignore_index=True)
 
-    # Para evitar dependência de variáveis externas complexas para esta demonstração,
-    # vamos apenas ordenar por Canais para demonstrar a estrutura.
-    # Use a ordenação real do seu código original no seu notebook.
-    # Verifica se final_df_small_marca existe e tem a coluna 'Canais' antes de tentar usá-lo
+    # DEBUG: Check final_df_small_marca_combined before sorting
+    print(f"\nVerificando final_df_small_marca_combined antes de ordenar para links:")
+    print(f"  Tem {len(final_df_small_marca_combined)} linhas.")
+    print(f"  Tem coluna 'Canais'? {'Canais' in final_df_small_marca_combined.columns}")
 
-    # DEBUG: Check final_df_small_marca before sorting
-    print(f"\nVerificando final_df_small_marca_irrelevantes antes de ordenar para links:")
-    print(f"  Tem {len(final_df_small_marca_irrelevantes)} linhas.")
-    print(f"  Tem coluna 'Canais'? {'Canais' in final_df_small_marca_irrelevantes.columns}")
-
-    if not final_df_small_marca_irrelevantes.empty and 'Canais' in final_df_small_marca_irrelevantes.columns:
-        # Sort the DataFrame
-        # Assuming you still want the specific order defined by marca1, marca2, w_marcas
-        # Ensure marca1, marca2, w_marcas are defined before this block
-        # If not, a simple sort_values('Canais') will work but might not match your desired order
+    if not final_df_small_marca_combined.empty and 'Canais' in final_df_small_marca_combined.columns:
         try:
-            # Attempt the custom sort if order is defined
-            # Ensure marca1, marca2, w_marcas are accessible here (defined earlier in the notebook)
-            order = [marca1, marca2] + [marca for marca in final_df_small_marca_irrelevantes['Canais'].unique() if marca not in (marca1, marca2)]
-            final_df_small_marca_sorted = final_df_small_marca_irrelevantes.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
+            order = [marca1, marca2] + [marca for marca in final_df_small_marca_combined['Canais'].unique() if marca not in (marca1, marca2)]
+            final_df_small_marca_sorted = final_df_small_marca_combined.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
             print("Ordenação personalizada dos links por Marca aplicada.")
+
+            #print("Conteúdo de final_df_small_marca_sorted gerado try:")
+            #print(final_df_small_marca_sorted[['Canais', 'Veiculo', 'Titulo', 'Link']])
+
         except (NameError, KeyError, AttributeError) as e:
             print(f"Aviso: Falha na ordenação personalizada dos links por Marca ({type(e).__name__}: {e}). Verifique se marca1, marca2 e w_marcas estão definidos corretamente.")
             print("Ordenando por Canais padrão.")
-            final_df_small_marca_sorted = final_df_small_marca_irrelevantes.sort_values(by=['Canais'])
+            final_df_small_marca_sorted = final_df_small_marca_combined.sort_values(by=['Canais'])
 
+            #print("Conteúdo de final_df_small_marca_sorted gerado try:")
+            #print(final_df_small_marca_sorted[['Canais', 'Veiculo', 'Titulo', 'Link']])
 
-        # Adicionar uma quebra de linha entre a seção de Setor e a seção de links de Marca (se houver links de Marca)
         document.add_paragraph("")
-        document.add_paragraph("--- LINKS DAS NOTÍCIAS DE MARCA COM CITAÇÕES - MENOR EXPOSIÇÃO ---") # Opcional: um título para a seção de links
+        document.add_paragraph("--- LINKS DAS NOTÍCIAS DE MARCA ---")
         document.add_paragraph("")
 
-        current_marca = None  # Inicializar variável para controlar a marca atual
+        current_marca = None
 
-        for index, row_small_marca in final_df_small_marca_sorted.iterrows(): # Use the sorted DataFrame
+        for index, row_small_marca in final_df_small_marca_sorted.iterrows():
             marca = row_small_marca['Canais']
-            if marca != current_marca:  # Verificar se a marca mudou
-                if current_marca is not None:  # Add blank line if not the first brand
+            if marca != current_marca:
+                if current_marca is not None:
                     document.add_paragraph("")
-                document.add_paragraph(f"*{marca}*")  # Incluir nome da marca
+                document.add_paragraph(f"*{marca}*")
                 current_marca = marca
 
-            # Obter informações do final_df_marca (original dataframe) para Veiculo, Titulo, CanaisCommodities
-            # Assumindo que final_df_marca e final_df_small_marca compartilham o mesmo 'Id'
             news_id_small = row_small_marca['Id']
             original_row_marca = final_df_marca[final_df_marca['Id'] == news_id_small]
             if original_row_marca.empty:
                 print(f"Aviso: ID {news_id_small} não encontrado em final_df_marca para links de Marca. Pulando este link.")
-                continue # Skip this link if original info not found
+                continue
 
             original_row_marca = original_row_marca.iloc[0]
 
             veiculo = original_row_marca['Veiculo']
-            titulo = original_row_marca['Titulo'] # Use titulo from original df
-            # Verifique se 'CanaisCommodities' existe no seu final_df_marca
-            canais_commodities = original_row_marca.get('CanaisCommodities', '') # Usa .get para evitar erro se a coluna não existir
+            titulo = original_row_marca['Titulo']
+            canais_commodities = original_row_marca.get('CanaisCommodities', '')
 
+            document.add_paragraph(f"{veiculo}: {titulo}")
 
-            # Incluir linha com Veiculo e Titulo
-            document.add_paragraph(f"{veiculo}: {titulo}") # Use 'titulo' variable
-
-            # Incluir linha com ShortURL e Coluna (se aplicável)
-            # Ensure 'ShortURL' column exists in final_df_small_marca
-            #short_url = row_small_marca.get('ShortURL', original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')) # Get ShortURL from small DF or fallback to original URL
             short_url = row_small_marca.get('ShortURL')
             if pd.isna(short_url) or not short_url:
                 short_url = original_row_marca.get('UrlVisualizacao', 'URL Não Encontrada')
 
             prefix = "Coluna - " if "Colunistas" in str(canais_commodities) else ""
-            #document.add_paragraph(f"{prefix}{short_url}")
-
-            # Check if it's the last news item for the current brand
-            # Check against the sorted DataFrame
-            # Ensure we don't go out of bounds
-            #if index + 1 < len(final_df_small_marca_sorted):
-            #    if final_df_small_marca_sorted.iloc[index + 1]['Canais'] == marca:
-            #        # If not the last item, add the asterisk line
-            #        document.add_paragraph("*")
-            # If it is the last item for this brand, the next iteration will add a blank line if needed.
-
-            # Incluir linha com ShortURL e Coluna (se aplicável)
             document.add_paragraph(f"{prefix}{short_url}")
 
-            # Sempre adicionar uma linha com asterisco após cada item
             document.add_paragraph("*")
-
     else:
-        print("DataFrame 'final_df_small_marca_small' não encontrado, vazio ou sem a coluna 'Canais'. Pulando a seção de links por Marcas.")
+        print("DataFrame 'final_df_small_marca_combined' não encontrado, vazio ou sem a coluna 'Canais'. Pulando a seção de links por Marcas.")
+
+    # --- Fim da seção links das notícias por Marcas ---
 
 
     # --- Novo Passo: Incluir resumos do Setor ---

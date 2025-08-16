@@ -11,6 +11,7 @@ DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 # Pastas
 pasta_api = "dados/api"
 pasta_marca_setor = "dados/marca_setor"
+pasta_output = "output"
 
 # Arquivo de Favoritos gerado pela API - ORIGINAL
 favoritos_marca = "Favoritos_Marcas.xlsx"
@@ -80,10 +81,14 @@ arq_results_final = os.path.join(pasta_marca_setor, results_final)
 results_setor = "Resumos_Gerados_DeepSeek_Setor.xlsx"
 arq_results_setor = os.path.join(pasta_marca_setor, results_setor)
 
+# Arquivo XLSX de RelevanceScore das notícias de Setor
+relevance_score_setor = "RelevanceScore_Gerados_DeepSeek_Setor.xlsx"
+arq_relevance_score_setor = os.path.join(pasta_marca_setor, relevance_score_setor)
+
 # Arquivo DOCX de Resumos
 #resumo_final = "Resumo_Marcas.docx"
 resumo_final = "Destaques do dia - J&F.docx"
-arq_resumo_final = os.path.join(pasta_marca_setor, resumo_final)
+arq_resumo_final = os.path.join(pasta_output, resumo_final)
 
 #resumo_final_ajustado = "Resumo_Marcas_ajustado.docx"
 #arq_resumo_final_ajustado = os.path.join(pasta_marca_setor, resumo_final_ajustado)
@@ -95,6 +100,15 @@ w_marcas = ['Holding', 'J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júni
 marcas_a_ignorar = ['J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior Friboi', 'J&F Mineração/LHG', 'J&F Mineração/LHG Mining', \
                     'Banco Original', 'PicPay', 'Eldorado', 'Flora', 'Âmbar Energia', 'Ambar Energia', \
                     'Canal Rural', 'Braskem', 'Instituto J&F' ]
+marcas_prioridade = ['J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior Friboi', 'PicPay', 'Banco Original', 'Eldorado', 'Flora', 'Âmbar Energia', 'Ambar Energia', \
+                     'Canal Rural', 'Braskem', 'Instituto J&F']
+lista_setores = ["Setor de Papel e Celulose", "Setor de Mineração", "Setor de Agronegócios", "Setor de Educação", "Setor de Energia", "Setor de Óleo de Gás", "Justiça", \
+                 "Meio Ambiente e ESG", "Política - Governo e Congresso Nacional"]
+qt_politica = 12   # 24%
+qt_financas = 11   # 21%
+qt_justica = 8    # 16%
+qt_agro = 8      # 16%
+qt_demais = 11    # 21%
 # Marcas que vêm em primeiro e segundo lugar no relatório
 marca1 = 'J&F'
 marca2 = 'JBS'

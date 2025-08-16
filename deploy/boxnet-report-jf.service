@@ -1,0 +1,36 @@
+[Unit]
+Description=Boxnet J&F Report Service
+Documentation=Executes J&F report container with daily rebuild
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+Environment="TZ=America/Sao_Paulo"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+WorkingDirectory=/home/boxadmin/jf-relatorio
+ExecStart=/usr/local/bin/boxnet-report-jf.sh
+StandardOutput=append:/mnt/datasense-data/containers/boxnet-report-jf/logs/systemd.log
+StandardError=append:/mnt/datasense-data/containers/boxnet-report-jf/logs/systemd.log
+TimeoutStartSec=7200
+TimeoutStopSec=60
+
+# Configurações de segurança
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+ReadWritePaths=//mnt/datasense-data/containers/boxnet-report-jf/logs
+ReadWritePaths=/home/boxadmin/jf-relatorio
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Restart policy - não aplicável para Type=oneshot
+RemainAfterExit=false
+
+[Install]
+WantedBy=multi-user.target

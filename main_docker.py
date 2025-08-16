@@ -22,7 +22,7 @@ from limpeza_setor import limpar_setor
 from limpeza_editoriais import limpar_editoriais
 from limpeza_specials import limpar_specials
 from relevancia import avaliar_relevancia
-from resumos_marcas_rev import agrupar_noticias_por_similaridade
+from resumos_marcas_v2 import agrupar_noticias_por_similaridade
 from prompts_setor import gerar_prompts_setor
 from resumos_setor import gerar_resumos_setor
 from relatorio_preliminar import gerar_versao_preliminar
@@ -73,22 +73,22 @@ def consultar_apis(configs, max_tentativas=5):
 
 def main():
     # 1. Aguarda a data e hora futura fornecida pelo operador
-    print('↓' * 94)
-    momento_inicial = input('Você deseja: (1) Iniciar imediatamente ou (2) Aguardar uma data e hora futuras? Digite 1 ou 2: ')
-    if momento_inicial not in ['1', '2']:
-        print("Opção inválida. Encerrando o programa.")
-        return
-    elif momento_inicial == '2':
-        segundos_para_esperar = aguardar_data_futura()
-        # Aguardar se for no futuro
-        if segundos_para_esperar > 0:
-            horas = segundos_para_esperar / 60 / 60
-            print(f"Faltam {horas:.2f} horas até a data e hora futuras especificadas em São Paulo.")
-            print("Aguardando...")
-            time.sleep(segundos_para_esperar)
-            print("Espera terminada. O código continuará a execução.")
-        else:
-            print("Continuando imediatamente pois a data especificada já passou.")
+    #print('↓' * 94)
+    #momento_inicial = input('Você deseja: (1) Iniciar imediatamente ou (2) Aguardar uma data e hora futuras? Digite 1 ou 2: ')
+    #if momento_inicial not in ['1', '2']:
+    #    print("Opção inválida. Encerrando o programa.")
+    #    return
+    #elif momento_inicial == '2':
+    #    segundos_para_esperar = aguardar_data_futura()
+    #    # Aguardar se for no futuro
+    #    if segundos_para_esperar > 0:
+    #        horas = segundos_para_esperar / 60 / 60
+    #        print(f"Faltam {horas:.2f} horas até a data e hora futuras especificadas em São Paulo.")
+    #        print("Aguardando...")
+    #        time.sleep(segundos_para_esperar)
+    #        print("Espera terminada. O código continuará a execução.")
+    #    else:
+    #        print("Continuando imediatamente pois a data especificada já passou.")
     
     # Pegar o timestamp atual em Brasília
     ts = obter_timestamp_brasilia()
@@ -172,13 +172,14 @@ def main():
     # 11. Geração da Versão Ajustada do RELATÓRIO DE DESTAQUES
     PASTA_ID_DRIVE = "1BdPoC3HZ7rIVd_0cgEVl4xGIjimVXTmq"  # Se quiser upload automático
     gerar_versao_ajustada(arq_resumo_final, pasta_id_drive=PASTA_ID_DRIVE)    
+    #gerar_versao_ajustada(arq_resumo_final)
 
     # Calcular o tempo decorrido desde aquele timestamp
     resultado = calcular_tempo_decorrido(ts)
     print(f"Tempo decorrido: {resultado['segundos']:.2f} segundos")
     print(f"                  {resultado['minutos']:.2f} minutos")
     print(f"                  {resultado['horas']:.2f} horas")
-    input("Fim do processamento. Pressione Enter para sair.")
+    #input("Fim do processamento. Pressione Enter para sair.")
 if __name__ == "__main__":
 
     main()

@@ -1,0 +1,9 @@
+services:
+  relatorio:
+    build: .
+    container_name: destaques_jf_diario
+    volumes:
+      - "/G/Drives compartilhados/Atendimento Infra/J&F/automacao:/app/output"  # Mapear a pasta de relatórios
+    environment:
+      - TZ=America/Sao_Paulo   # Ajustar fuso horário
+    restart: unless-stopped

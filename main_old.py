@@ -22,11 +22,11 @@ from limpeza_setor import limpar_setor
 from limpeza_editoriais import limpar_editoriais
 from limpeza_specials import limpar_specials
 from relevancia import avaliar_relevancia
-from resumos_marcas_rev import agrupar_noticias_por_similaridade
+from resumos_marcas_v2 import agrupar_noticias_por_similaridade
 from prompts_setor import gerar_prompts_setor
 from resumos_setor import gerar_resumos_setor
 from relatorio_preliminar import gerar_versao_preliminar
-from relatorio_ajustado_final import gerar_versao_ajustada
+from relatorio_ajustado import gerar_versao_ajustada
 from config import arq_api_original, arq_api, arq_api_irrelevantes, arq_results, arq_results_irrelevantes, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
     arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final
 
@@ -112,16 +112,7 @@ def main():
 
     # 4.B Agrupa MARCAS por SIMILARIDADE e gera RESUMOS pelo DeepSeek - Notícias Irrelevantes
     df_resumos_marcas_irrelevantes = agrupar_noticias_por_similaridade(final_df_small_irrelevantes)
-    #df_resumos_marcas_irrelevantes.to_excel(arq_results_irrelevantes, index=False)
-    #df_resumos_marcas_irrelevantes = agrupar_noticias_por_similaridade(final_df_small_irrelevantes)
-
-    if df_resumos_marcas_irrelevantes is not None and not df_resumos_marcas_irrelevantes.empty:
-        df_resumos_marcas_irrelevantes.to_excel(arq_results_irrelevantes, index=False)
-    else:
-        print("⚠️ Nenhuma notícia irrelevante encontrada. Gerando arquivo vazio com cabeçalho.")
-        colunas = ["Marca", "GrupoID", "QtdNoticias", "Ids", "Resumo"]
-        pd.DataFrame(columns=colunas).to_excel(arq_results_irrelevantes, index=False)
-
+    df_resumos_marcas_irrelevantes.to_excel(arq_results_irrelevantes, index=False)
 
     # 5. Chamada de API de SETOR
     caminho_json = "dados/config/api_setor_configs.json"
@@ -170,8 +161,7 @@ def main():
     gerar_versao_preliminar(final_df_small, final_df_small_irrelevantes, df_resumos_marcas, df_resumos_marcas_irrelevantes, final_df, df_resumos_setor, final_df_setor, final_df_editoriais, final_df_small_specials )
     
     # 11. Geração da Versão Ajustada do RELATÓRIO DE DESTAQUES
-    PASTA_ID_DRIVE = "1BdPoC3HZ7rIVd_0cgEVl4xGIjimVXTmq"  # Se quiser upload automático
-    gerar_versao_ajustada(arq_resumo_final, pasta_id_drive=PASTA_ID_DRIVE)    
+    gerar_versao_ajustada(arq_resumo_final)
 
     # Calcular o tempo decorrido desde aquele timestamp
     resultado = calcular_tempo_decorrido(ts)

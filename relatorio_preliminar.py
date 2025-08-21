@@ -12,8 +12,158 @@ import requests
 import os
 from datetime import datetime
 
+# 1. FUNÇÃO AUXILIAR PARA ENCURTAMENTO DE URL (adicionar no início do arquivo)
+def encurtar_url_seguro(url_original, max_tentativas=3, delay=2):
+    """
+    Função auxiliar para encurtar URLs de forma segura com tratamento de erro robusto
+    """
+    import pyshorteners
+    import requests
+    import time
+    
+    # Validar se a URL é válida antes de tentar encurtar
+    if not url_original or pd.isna(url_original) or str(url_original).strip() == '':
+        print(f"URL vazia ou inválida: {url_original}")
+        return str(url_original) if url_original else "URL não disponível"
+    
+    url_str = str(url_original).strip()
+    
+    # Verificar se já é uma URL válida
+    if not url_str.startswith(('http://', 'https://')):
+        print(f"URL não tem protocolo válido: {url_str}")
+        return url_str
+    
+    s = pyshorteners.Shortener()
+    
+    for tentativa in range(max_tentativas):
+        try:
+            # Tentar TinyURL primeiro
+            short_url = s.tinyurl.short(url_str)
+            return short_url
+            
+        except Exception as e:
+            erro_str = str(e)
+            print(f"Tentativa {tentativa + 1}/{max_tentativas} - Erro TinyURL: {erro_str}")
+            
+            # Se for erro específico do TinyURL, tentar serviço alternativo
+            if tentativa == max_tentativas - 1:
+                try:
+                    # Tentar serviço alternativo (is.gd)
+                    short_url = s.isgd.short(url_str)
+                    print(f"URL encurtada com serviço alternativo (is.gd)")
+                    return short_url
+                except Exception as e2:
+                    print(f"Erro também no serviço alternativo: {str(e2)}")
+                    break
+            
+            if tentativa < max_tentativas - 1:
+                time.sleep(delay)
+    
+    print(f"Falha em todos os serviços de encurtamento. Usando URL original.")
+    return url_str
+
+
+# 2. CORREÇÃO NA SEÇÃO DE MARCAS (substituir o código de encurtamento existente)
+
+
+# 4. CORREÇÃO PRINCIPAL NA SEÇÃO DE EDITORIAIS
+def processar_editoriais_integrado(final_df_editorial, document):
+    """
+    Processa editoriais de forma integrada (substitui toda a seção de editoriais)
+    """
+    print(f"\nProcessando {len(final_df_editorial)} editoriais...")
+    
+    if final_df_editorial.empty:
+        print("Nenhum editorial encontrado.")
+        return
+    
+    # Adicionar cabeçalho da seção
+    document.add_paragraph("")
+    document.add_paragraph("*EDITORIAIS*")
+    document.add_paragraph("")
+
+    # Debug: verificar estrutura do DataFrame
+    print(f"Colunas disponíveis em final_df_editorial: {list(final_df_editorial.columns)}")
+    print(f"Primeiras linhas do DataFrame:")
+    print(final_df_editorial.head())
+
+    for index, row_editorial in final_df_editorial.iterrows():
+        try:
+            # Tentar diferentes nomes de colunas possíveis
+            w_veiculo_editorial = (
+                row_editorial.get('Veiculo') or 
+                row_editorial.get('Veículo') or 
+                row_editorial.get('veiculo') or 
+                'Veículo Desconhecido'
+            )
+            
+            w_titulo_editorial = (
+                row_editorial.get('Titulo') or 
+                row_editorial.get('Título') or 
+                row_editorial.get('titulo') or 
+                row_editorial.get('Conteudo') or 
+                row_editorial.get('Conteúdo') or 
+                'Título não disponível'
+            )
+            
+            w_url_editorial = (
+                row_editorial.get('UrlVisualizacao') or 
+                row_editorial.get('Url') or 
+                row_editorial.get('URL') or 
+                row_editorial.get('Link') or 
+                'URL Não Disponível'
+            )
+            
+            print(f"\nEditorial {index + 1}:")
+            print(f"  Veículo: {w_veiculo_editorial}")
+            print(f"  Título: {w_titulo_editorial}")
+            print(f"  URL: {w_url_editorial}")
+            
+            # Adicionar informações básicas
+            document.add_paragraph(f"{w_veiculo_editorial}: {w_titulo_editorial}")
+            
+            # Encurtamento seguro da URL
+            if w_url_editorial and w_url_editorial != 'URL Não Disponível':
+                short_url_editorial = encurtar_url_seguro(w_url_editorial, max_tentativas=3, delay=1)
+            else:
+                short_url_editorial = w_url_editorial
+                print(f"URL inválida para editorial {index + 1}, usando valor original")
+            
+            document.add_paragraph(short_url_editorial)
+            document.add_paragraph("*")
+            
+            print(f"Editorial {index + 1} processado com sucesso")
+            
+        except Exception as e:
+            print(f"Erro ao processar editorial {index + 1}: {str(e)}")
+            print(f"Dados do editorial: {dict(row_editorial)}")
+            # Continuar com o próximo editorial em caso de erro
+            document.add_paragraph(f"Editorial {index + 1}: Erro no processamento")
+            document.add_paragraph("URL não disponível")
+            document.add_paragraph("*")
+            continue
+
+# 4. FUNÇÃO DE DEBUG para verificar estrutura dos dados
+def debug_dataframe_structure(df, nome_df):
+    """
+    Função auxiliar para debugar a estrutura dos DataFrames
+    """
+    print(f"\n=== DEBUG: Estrutura do {nome_df} ===")
+    print(f"Shape: {df.shape}")
+    print(f"Colunas: {list(df.columns)}")
+    if not df.empty:
+        print(f"Primeiras 2 linhas:")
+        for i in range(min(2, len(df))):
+            print(f"Linha {i}: {dict(df.iloc[i])}")
+    else:
+        print("DataFrame vazio")
+    print("=" * 50)
+
 def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevantes, df_resumo_marca, df_resumo_marca_irrelevantes, final_df_marca, df_resumo_setor, final_df_setor, final_df_editorial, final_df_SPECIALS_small):
     # 1. Carregar os DataFrames
+    # DEBUG: Verificar estrutura dos DataFrames recebidos
+    debug_dataframe_structure(final_df_editorial, "final_df_editorial")
+
     #df_resumo_marca = pd.read_excel(arq_results_final) # Renomeado para clareza
     #final_df_marca = pd.read_excel(arq_api_original) # Renomeado para clareza
     #df_resumo_setor = pd.read_excel(arq_results_setor) # Carregar resultados do setor
@@ -85,26 +235,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
 
             # 6. Encurtar a URL
-            s = pyshorteners.Shortener()
-            retries = 3  # Number of retries
-            short_url_marca = w_url_marca # Inicializa com a URL original
-            for i in range(retries):
-                try:
-                    short_url_marca = s.tinyurl.short(w_url_marca)
-                    break  # Exit the loop if successful
-                except requests.exceptions.RequestException as e:
-                    # Check if the error is due to a redirect or other network issue
-                    if "Read timed out" in str(e) or "connection" in str(e) or "Max retries exceeded" in str(e):
-                        print(f"Erro de conexão/timeout ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
-                    else:
-                        print(f"Erro ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
-
-                    if i < retries - 1:
-                        time.sleep(2)  # Wait before retrying
-                    else:
-                        print(f"Falha ao encurtar URL para Marca ID {news_id} após {retries} tentativas. Usando URL original.")
-                        short_url_marca = w_url_marca # Use original URL if all retries fail
-
+            short_url_marca = encurtar_url_seguro(w_url_marca, max_tentativas=3, delay=1)
 
             # **Atualizar o DataFrame arq_api** (Atualiza final_df_small_marca)
             # Certifica-se de que a linha existe antes de tentar atualizar
@@ -216,25 +347,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
 
             # 6. Encurtar a URL
-            s = pyshorteners.Shortener()
-            retries = 3  # Number of retries
-            short_url_marca = w_url_marca # Inicializa com a URL original
-            for i in range(retries):
-                try:
-                    short_url_marca = s.tinyurl.short(w_url_marca)
-                    break  # Exit the loop if successful
-                except requests.exceptions.RequestException as e:
-                    # Check if the error is due to a redirect or other network issue
-                    if "Read timed out" in str(e) or "connection" in str(e) or "Max retries exceeded" in str(e):
-                        print(f"Erro de conexão/timeout ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
-                    else:
-                        print(f"Erro ao encurtar URL (tentativa {i+1}/{retries}) para Marca ID {news_id}: {e}")
-
-                    if i < retries - 1:
-                        time.sleep(2)  # Wait before retrying
-                    else:
-                        print(f"Falha ao encurtar URL para Marca ID {news_id} após {retries} tentativas. Usando URL original.")
-                        short_url_marca = w_url_marca # Use original URL if all retries fail
+            short_url_marca = encurtar_url_seguro(w_url_marca, max_tentativas=3, delay=1)
 
 
             # **Atualizar o DataFrame arq_api** (Atualiza final_df_small_marca_irrelevantes)
@@ -444,23 +557,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
 
         # 15. Incluir a URL encurtada (Encapsular a lógica de encurtamento)
-        s = pyshorteners.Shortener()
-        retries = 3
-        short_url_setor = w_url_setor # Inicializa com a URL original
-        for i in range(retries):
-            try:
-                short_url_setor = s.tinyurl.short(w_url_setor)
-                break
-            except requests.exceptions.RequestException as e:
-                # Check if the error is due to a redirect or other network issue
-                if "Read timed out" in str(e) or "connection" in str(e) or "Max retries exceeded" in str(e):
-                    print(f"Erro de conexão/timeout ao encurtar URL (tentativa {i+1}/{retries}) para Setor ID {news_id}: {e}")
-                else:
-                    print(f"Erro ao encurtar URL (tentativa {i+1}/{retries}) para Setor ID {news_id}: {e}")
-                if i < retries - 1:
-                    time.sleep(2)
-                else:
-                    print(f"Falha ao encurtar URL para Setor ID {news_id} após {retries} tentativas. Usando URL original.")
+        short_url_setor = encurtar_url_seguro(w_url_setor, max_tentativas=3, delay=1)
 
         document.add_paragraph(short_url_setor)
 
@@ -469,41 +566,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
 
 
-    # --- Novo Passo: Incluir Editoriais ---
-    print(f"\nProcessando {len(final_df_editorial)} editoriais...")
-    if not final_df_editorial.empty:
-        document.add_paragraph("")
-        document.add_paragraph("*EDITORIAIS*")
-        document.add_paragraph("") # Linha em branco após o título dos editoriais
-
-        for index, row_editorial in final_df_editorial.iterrows():
-            # 17. Incluir uma linha com o conteúdo do campo Veiculo, mais a string ": ", mais o conteúdo do campo Conteudo
-            w_veiculo_editorial = row_editorial.get('Veiculo', 'Veículo Desconhecido')
-            w_conteudo_editorial = row_editorial.get('Titulo', 'Título não disponível')
-            document.add_paragraph(f"{w_veiculo_editorial}: {w_conteudo_editorial}")
-
-            # 18. Incluir uma linha com a url encurtada do conteúdo do campo UrlVisualizacao
-            w_url_editorial = row_editorial.get('UrlVisualizacao', 'URL Não Disponível')
-
-            s = pyshorteners.Shortener()
-            retries = 3
-            short_url_editorial = w_url_editorial
-            for i in range(retries):
-                try:
-                    short_url_editorial = s.tinyurl.short(w_url_editorial)
-                    break
-                except requests.exceptions.RequestException as e:
-                    if "Read timed out" in str(e) or "connection" in str(e) or "Max retries exceeded" in str(e):
-                        print(f"Erro de conexão/timeout ao encurtar URL (tentativa {i+1}/{retries}) para Editorial {index}: {e}")
-                    else:
-                        print(f"Erro ao encurtar URL (tentativa {i+1}/{retries}) para Editorial {index}: {e}")
-                    if i < retries - 1:
-                        time.sleep(2)
-                    else:
-                        print(f"Falha ao encurtar URL para Editorial {index} após {retries} tentativas. Usando URL original.")
-
-            document.add_paragraph(short_url_editorial)
-            document.add_paragraph("*") # Adicionar linha com asterisco após cada editorial
+    # --- Processar Editoriais ---
+    processar_editoriais_integrado(final_df_editorial, document)
 
 
 

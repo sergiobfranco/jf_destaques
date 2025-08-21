@@ -10,8 +10,12 @@ from datetime import datetime
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 
+def _limpar_paragrafo(paragraph):
+    # remove todos os runs atuais
+    for r in paragraph.runs[::-1]:
+        paragraph._p.remove(r._element)
 
-# Função para upload no Google Drive
+# Funcao para upload no Google Drive
 def upload_para_google_drive(caminho_arquivo, nome_arquivo, pasta_id):
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
@@ -37,16 +41,14 @@ def upload_para_google_drive(caminho_arquivo, nome_arquivo, pasta_id):
         body=file_metadata,
         media_body=media,
         fields='id',
-        supportsAllDrives=True  # ✅ ESSENCIAL para pastas compartilhadas
+        supportsAllDrives=True  # ESSENCIAL para pastas compartilhadas
     ).execute()
 
-    print(f"✅ Upload concluído com ID: {uploaded_file.get('id')}")
-
-
+    print(f"Upload concluido com ID: {uploaded_file.get('id')}")
 
 def adicionar_hyperlink(paragraph, url, texto_display):
     """
-    Adiciona um hyperlink a um parágrafo no documento Word
+    Adiciona um hyperlink a um paragrafo no documento Word
     """
     # Criar o elemento hyperlink
     hyperlink = OxmlElement('w:hyperlink')
@@ -80,153 +82,199 @@ def adicionar_hyperlink(paragraph, url, texto_display):
 
 def processar_urls_em_paragrafo(paragraph):
     """
-    Processa um parágrafo, convertendo URLs em hyperlinks
+    VERSAO CORRIGIDA - Processa um paragrafo, convertendo URLs em hyperlinks
+    mantendo a pontuacao original mas criando hyperlinks limpos
     """
-    texto_completo = paragraph.text
-
-    # REGEX CORRIGIDA - Captura URLs completas incluindo parâmetros, fragmentos, etc.
-    # Esta regex é mais robusta e captura URLs até encontrar espaço ou fim de linha
-    padrao_url = r'https?://[^\s<>"{}|\\^`\[\]]+[^\s<>"{}|\\^`\[\].,;:!?)]'
-
-    # Alternativa ainda mais simples e eficaz:
-    # padrao_url = r'https?://\S+'
-
-    urls_encontradas = re.findall(padrao_url, texto_completo)
-
-    # Remover URLs duplicadas mantendo a ordem
-    urls_unicas = []
-    for url in urls_encontradas:
-        if url not in urls_unicas:
-            urls_unicas.append(url)
-
-    if urls_unicas:
-        print(f"   🔗 Encontradas {len(urls_unicas)} URLs: {urls_unicas[:2]}{'...' if len(urls_unicas) > 2 else ''}")
-
-        # Limpar o parágrafo atual
-        paragraph.clear()
-
-        # Dividir o texto pelas URLs
-        texto_restante = texto_completo
-
-        for url in urls_unicas:
-            # Encontrar a posição da URL no texto
-            if url in texto_restante:
-                partes = texto_restante.split(url, 1)
-
-                if len(partes) == 2:
-                    # Adicionar texto antes da URL
-                    if partes[0]:
-                        paragraph.add_run(partes[0])
-
-                    # Adicionar hyperlink
-                    hyperlink_element = adicionar_hyperlink(paragraph, url, url)
-                    paragraph._p.append(hyperlink_element)
-
-                    # Continuar com o resto do texto
-                    texto_restante = partes[1]
-
-        # Adicionar texto restante após a última URL
-        if texto_restante:
-            paragraph.add_run(texto_restante)
-
-        return True
-
-    return False
-
-
-
-def converter_urls_docx_para_hyperlinks(arquivo_entrada, pasta_destino='/app/output', pasta_id_drive=None):
-    # 1️⃣ Validar se o arquivo existe
-    if not os.path.exists(arquivo_entrada):
-        print(f"❌ Erro: Arquivo '{arquivo_entrada}' não encontrado!")
+    texto_completo = paragraph.text.strip()
+    
+    if not texto_completo:
         return False
 
-    print(f"📖 Abrindo arquivo: {arquivo_entrada}")
+    # Regex para encontrar URLs completas
+    padrao_url = r'https?://[^\s<>"{}|\\^`\[\]]+(?:[^\s<>"{}|\\^`\[\]]*)'
+    
+    urls_encontradas = re.findall(padrao_url, texto_completo)
+
+    if not urls_encontradas:
+        return False
+
+    # NOVA ABORDAGEM: Processar URLs mantendo a pontuacao original
+    urls_processadas = []
+    for url in urls_encontradas:
+        # Separar a URL limpa da pontuacao
+        url_limpa = re.sub(r'[),;.:!?]+$', '', url)
+        pontuacao = url[len(url_limpa):] if len(url) > len(url_limpa) else ''
+        
+        if url_limpa and url_limpa not in [item[0] for item in urls_processadas]:
+            urls_processadas.append((url_limpa, pontuacao, url))
+
+    if not urls_processadas:
+        return False
+
+    print(f"   Encontradas {len(urls_processadas)} URLs: {[item[0] for item in urls_processadas[:2]]}{'...' if len(urls_processadas) > 2 else ''}")
+
+    # Limpar o paragrafo atual
+    _limpar_paragrafo(paragraph)
+
+    # PROCESSAMENTO APRIMORADO: Manter pontuacao original
+    texto_restante = texto_completo
+
+    for url_limpa, pontuacao, url_original in urls_processadas:
+        if url_original in texto_restante:
+            # Dividir o texto pela URL original
+            partes = texto_restante.split(url_original, 1)
+            
+            if len(partes) == 2:
+                # Adicionar texto antes da URL (se houver)
+                if partes[0]:
+                    paragraph.add_run(partes[0])
+
+                # Criar hyperlink apenas com URL limpa
+                hyperlink_element = adicionar_hyperlink(paragraph, url_limpa, url_limpa)
+                paragraph._p.append(hyperlink_element)
+                
+                # Adicionar a pontuacao como texto normal (nao hyperlink)
+                if pontuacao:
+                    paragraph.add_run(pontuacao)
+
+                # Continuar com o resto do texto
+                texto_restante = partes[1]
+
+    # Adicionar texto restante apos a ultima URL (se houver)
+    if texto_restante:
+        paragraph.add_run(texto_restante)
+
+    return True
+
+def converter_urls_docx_para_hyperlinks(arquivo_entrada, pasta_destino='/app/output', pasta_id_drive=None):
+    # 1 Validar se o arquivo existe
+    if not os.path.exists(arquivo_entrada):
+        print(f"ERRO: Arquivo '{arquivo_entrada}' nao encontrado!")
+        return False
+
+    print(f"Abrindo arquivo: {arquivo_entrada}")
     doc = Document(arquivo_entrada)
 
-    # 2️⃣ Regex para encontrar URLs
-    regex_url = r'(https?://[^\s]+)'
-    for p in doc.paragraphs:
-        if p.text.strip():
-            processar_urls_em_paragrafo(p)
+    total_paragrafos_processados = 0
+    total_urls_convertidas = 0
 
+    # 2 Processar paragrafos principais
+    for i, p in enumerate(doc.paragraphs):
+        if p.text.strip():
+            urls_antes = len(re.findall(r'https?://[^\s]+', p.text))
+            if processar_urls_em_paragrafo(p):
+                total_paragrafos_processados += 1
+                total_urls_convertidas += urls_antes
+                print(f"   Paragrafo {i+1} processado com {urls_antes} URLs")
+
+    # 3 Processar tabelas
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for p in cell.paragraphs:
                     if p.text.strip():
-                        processar_urls_em_paragrafo(p)
+                        urls_antes = len(re.findall(r'https?://[^\s]+', p.text))
+                        if processar_urls_em_paragrafo(p):
+                            total_paragrafos_processados += 1
+                            total_urls_convertidas += urls_antes
 
-    # 3️⃣ Gerar nome do arquivo final
+    # 4 Gerar nome do arquivo final
     nome_base = os.path.basename(arquivo_entrada).replace('.docx', '')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     arquivo_saida = os.path.join('output', f"{nome_base}_{timestamp}.docx")
 
-    # 4️⃣ Salvar primeiro o arquivo localmente
+    # 5 Salvar primeiro o arquivo localmente
     os.makedirs('output', exist_ok=True)
     doc.save(arquivo_saida)
-    print(f"💾 Arquivo salvo localmente: {arquivo_saida}")
+    
+    print(f"\nEstatisticas do processamento:")
+    print(f"   - Paragrafos processados: {total_paragrafos_processados}")
+    print(f"   - URLs convertidas em hyperlinks: {total_urls_convertidas}")
+    print(f"Arquivo salvo localmente: {arquivo_saida}")
 
-    # 5️⃣ Upload para Google Drive, se configurado
+    # 6 Upload para Google Drive, se configurado
     if pasta_id_drive:
-        upload_para_google_drive(arquivo_saida, os.path.basename(arquivo_saida), pasta_id_drive)
+        try:
+            upload_para_google_drive(arquivo_saida, os.path.basename(arquivo_saida), pasta_id_drive)
+        except Exception as e:
+            print(f"Erro no upload para Google Drive: {str(e)}")
 
-    # 6️⃣ Copiar para a pasta compartilhada do Docker (opcional)
+    # 7 Copiar para a pasta compartilhada do Docker (opcional)
     if os.path.isdir(pasta_destino):
         destino_drive = os.path.join(pasta_destino, os.path.basename(arquivo_saida))
-        shutil.copy2(arquivo_saida, destino_drive)
-        print(f"📂 Arquivo também copiado para pasta compartilhada: {destino_drive}")
+        try:
+            # Evita SameFileError quando origem e destino sao o mesmo arquivo
+            if not (os.path.exists(destino_drive) and os.path.samefile(arquivo_saida, destino_drive)):
+                shutil.copy2(arquivo_saida, destino_drive)
+                print(f"Arquivo tambem copiado para pasta compartilhada: {destino_drive}")
+            else:
+                print("Origem e destino sao o mesmo arquivo; copia ignorada.")
+        except FileNotFoundError:
+            # Alguns FS pedem que o diretorio exista antes do samefile; garanta e copie
+            os.makedirs(pasta_destino, exist_ok=True)
+            shutil.copy2(arquivo_saida, destino_drive)
+            print(f"Arquivo tambem copiado para pasta compartilhada: {destino_drive}")
     else:
-        print(f"⚠️ Pasta destino '{pasta_destino}' não encontrada. Pulei a cópia local.")
+        print(f"Pasta destino '{pasta_destino}' nao encontrada. Pulei a copia local.")
 
     return True
 
-
 def metodo_alternativo_melhorado(arquivo_entrada, arquivo_saida):
     """
-    Método alternativo melhorado - substitui URLs por texto com formatação
+    Metodo alternativo melhorado - substitui URLs por texto com formatacao
     """
     try:
-        print(f"📖 Método alternativo melhorado - Abrindo arquivo: {arquivo_entrada}")
+        print(f"Metodo alternativo melhorado - Abrindo arquivo: {arquivo_entrada}")
         doc = Document(arquivo_entrada)
 
         total_urls_encontradas = 0
         paragrafos_processados = 0
 
-        # Regex melhorada para capturar URLs completas
-        padrao_url = r'https?://[^\s<>"{}|\\^`\[\]]+[^\s<>"{}|\\^`\[\].,;:!?)]'
+        # Regex para capturar URLs completas
+        padrao_url = r'https?://[^\s<>"{}|\\^`\[\]]+(?:[^\s<>"{}|\\^`\[\]]*)'
 
-        # Processar parágrafos
+        # Processar paragrafos
         for paragraph in doc.paragraphs:
             if not paragraph.text.strip():
                 continue
 
             texto_original = paragraph.text
             urls_no_texto = re.findall(padrao_url, texto_original)
+            
+            # Processar URLs mantendo pontuacao
+            urls_processadas = []
+            for url in urls_no_texto:
+                url_limpa = re.sub(r'[),;.:!?]+$', '', url)
+                pontuacao = url[len(url_limpa):] if len(url) > len(url_limpa) else ''
+                
+                if url_limpa and url_limpa not in [item[0] for item in urls_processadas]:
+                    urls_processadas.append((url_limpa, pontuacao, url))
 
-            if urls_no_texto:
-                print(f"   🔗 Parágrafo {paragrafos_processados + 1}: {len(urls_no_texto)} URLs encontradas")
-                total_urls_encontradas += len(urls_no_texto)
+            if urls_processadas:
+                print(f"   Paragrafo {paragrafos_processados + 1}: {len(urls_processadas)} URLs encontradas")
+                total_urls_encontradas += len(urls_processadas)
 
-                # Limpar o parágrafo
-                paragraph.clear()
+                # Limpar o paragrafo
+                _limpar_paragrafo(paragraph)
 
-                # Reconstruir o parágrafo com formatação
+                # Reconstruir o paragrafo com formatacao
                 texto_restante = texto_original
 
-                for url in urls_no_texto:
-                    if url in texto_restante:
-                        # Dividir o texto pela URL
-                        partes = texto_restante.split(url, 1)
+                for url_limpa, pontuacao, url_original in urls_processadas:
+                    if url_original in texto_restante:
+                        partes = texto_restante.split(url_original, 1)
+                        
                         if len(partes) == 2:
                             # Adicionar texto antes da URL
                             if partes[0]:
                                 paragraph.add_run(partes[0])
 
-                            # Adicionar URL com formatação especial
-                            run_url = paragraph.add_run(url)
-                            run_url.font.color.rgb = RGBColor(0, 0, 255)  # Azul
-                            run_url.underline = True
+                            # Usar URL limpa no hyperlink
+                            paragraph._p.append(adicionar_hyperlink(paragraph, url_limpa, url_limpa))
+                            
+                            # Adicionar pontuacao como texto normal
+                            if pontuacao:
+                                paragraph.add_run(pontuacao)
 
                             # Continuar com o resto
                             texto_restante = partes[1]
@@ -237,7 +285,7 @@ def metodo_alternativo_melhorado(arquivo_entrada, arquivo_saida):
 
             paragrafos_processados += 1
 
-        # Processar tabelas também
+        # Processar tabelas tambem
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -247,22 +295,35 @@ def metodo_alternativo_melhorado(arquivo_entrada, arquivo_saida):
 
                         texto_original = paragraph.text
                         urls_no_texto = re.findall(padrao_url, texto_original)
+                        
+                        # Processar URLs mantendo pontuacao
+                        urls_processadas = []
+                        for url in urls_no_texto:
+                            url_limpa = re.sub(r'[),;.:!?]+$', '', url)
+                            pontuacao = url[len(url_limpa):] if len(url) > len(url_limpa) else ''
+                            
+                            if url_limpa and url_limpa not in [item[0] for item in urls_processadas]:
+                                urls_processadas.append((url_limpa, pontuacao, url))
 
-                        if urls_no_texto:
-                            total_urls_encontradas += len(urls_no_texto)
-                            paragraph.clear()
+                        if urls_processadas:
+                            total_urls_encontradas += len(urls_processadas)
+                            _limpar_paragrafo(paragraph)
 
                             texto_restante = texto_original
-                            for url in urls_no_texto:
-                                if url in texto_restante:
-                                    partes = texto_restante.split(url, 1)
+                            for url_limpa, pontuacao, url_original in urls_processadas:
+                                if url_original in texto_restante:
+                                    partes = texto_restante.split(url_original, 1)
+                                    
                                     if len(partes) == 2:
                                         if partes[0]:
                                             paragraph.add_run(partes[0])
 
-                                        run_url = paragraph.add_run(url)
-                                        run_url.font.color.rgb = RGBColor(0, 0, 255)
-                                        run_url.underline = True
+                                        # Usar URL limpa no hyperlink
+                                        paragraph._p.append(adicionar_hyperlink(paragraph, url_limpa, url_limpa))
+                                        
+                                        # Adicionar pontuacao como texto normal
+                                        if pontuacao:
+                                            paragraph.add_run(pontuacao)
 
                                         texto_restante = partes[1]
 
@@ -270,38 +331,42 @@ def metodo_alternativo_melhorado(arquivo_entrada, arquivo_saida):
                                 paragraph.add_run(texto_restante)
 
         # Salvar documento
+        doc.save(arquivo_saida)
+
+        # Upload para Google Drive
         arquivo_local = arquivo_saida
         nome_arquivo = os.path.basename(arquivo_saida)
-        upload_para_google_drive(arquivo_local, nome_arquivo, "1HCo8W9Q9ak8aKOmMRPhSyVBntCS_GD6J")        
-        doc.save(arquivo_saida)
+        try:
+            upload_para_google_drive(arquivo_local, nome_arquivo, "1HCo8W9Q9ak8aKOmMRPhSyVBntCS_GD6J")        
+        except Exception as e:
+            print(f"Erro no upload para Google Drive: {str(e)}")
 
         # Copiar para o Google Drive
         pasta_drive = r'/app/relatorios/'  # Altere para o caminho da sua pasta do Drive
         if os.path.isdir(pasta_drive):
-            import shutil
             destino_drive = os.path.join(pasta_drive, os.path.basename(arquivo_saida))
             shutil.copy2(arquivo_saida, destino_drive)
-            print(f"📁 Arquivo também salvo em: {destino_drive}")
+            print(f"Arquivo tambem salvo em: {destino_drive}")
         else:
-            print(f"⚠️ Pasta do Google Drive não encontrada: {pasta_drive}")
+            print(f"Pasta do Google Drive nao encontrada: {pasta_drive}")
             
-        print(f"\n✅ Método alternativo concluído!")
-        print(f"📊 Estatísticas:")
-        print(f"   - Parágrafos processados: {paragrafos_processados}")
+        print(f"\nMetodo alternativo concluido!")
+        print(f"Estatisticas:")
+        print(f"   - Paragrafos processados: {paragrafos_processados}")
         print(f"   - Total de URLs formatadas: {total_urls_encontradas}")
-        print(f"💾 Arquivo salvo como: {arquivo_saida}")
+        print(f"Arquivo salvo como: {arquivo_saida}")
 
         return True
 
     except Exception as e:
-        print(f"❌ Erro no método alternativo: {str(e)}")
+        print(f"Erro no metodo alternativo: {str(e)}")
         return False
 
 def testar_regex():
     """
-    Função para testar a regex com URLs de exemplo
+    Funcao para testar a regex com URLs de exemplo
     """
-    print("🧪 Testando regex com URLs de exemplo...")
+    print("Testando regex com URLs de exemplo...")
 
     # URLs de teste
     urls_teste = [
@@ -313,35 +378,35 @@ def testar_regex():
     ]
 
     # Regex melhorada
-    padrao_url = r'https?://[^\s<>"{}|\\^`\[\]]+[^\s<>"{}|\\^`\[\].,;:!?)]'
+    padrao_url = r'https?://[^\s<>"{}|\\^`\[\]]+(?:[^\s<>"{}|\\^`\[\]]*)'
 
     for url in urls_teste:
         match = re.search(padrao_url, url)
         if match:
-            print(f"   ✅ {url} -> Capturado: {match.group()}")
+            print(f"   OK {url} -> Capturado: {match.group()}")
         else:
-            print(f"   ❌ {url} -> Não capturado")
+            print(f"   ERRO {url} -> Nao capturado")
 
     print("\n" + "="*50)
 
 def gerar_versao_ajustada(arquivo_preliminar, pasta_id_drive=None):
     """
-    Aplica os ajustes finais ao relatório:
+    Aplica os ajustes finais ao relatorio:
     - Converte URLs em hyperlinks
     - Gera nome do arquivo com timestamp
     - Salva localmente e realiza upload para o Google Drive (se configurado)
     """
 
     if not os.path.exists(arquivo_preliminar):
-        print(f"❌ Arquivo não encontrado: {arquivo_preliminar}")
+        print(f"Arquivo nao encontrado: {arquivo_preliminar}")
         return
 
-    print(f"📖 Aplicando versão ajustada com hyperlinks e timestamp...")
+    print(f"Aplicando versao ajustada com hyperlinks e timestamp...")
     
-    # 🧠 Reaproveitar função que já processa os hyperlinks e salva com timestamp
+    # Reaproveitar funcao que ja processa os hyperlinks e salva com timestamp
     sucesso = converter_urls_docx_para_hyperlinks(arquivo_preliminar, pasta_id_drive=pasta_id_drive)
 
     if sucesso:
-        print("✅ Versão final ajustada com sucesso.")
+        print("Versao final ajustada com sucesso.")
     else:
-        print("❌ Falha ao gerar a versão ajustada.")
+        print("Falha ao gerar a versao ajustada.")

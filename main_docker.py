@@ -19,7 +19,7 @@ from cronometro import obter_timestamp_brasilia, calcular_tempo_decorrido
 from temporizador import aguardar_data_futura
 from limpeza_marcas import limpar_marcas
 from limpeza_setor import limpar_setor
-from limpeza_editoriais import limpar_editoriais
+from limpeza_editoriais_descartar import limpar_editoriais
 from limpeza_specials import limpar_specials
 from relevancia import avaliar_relevancia
 from resumos_marcas_v2 import agrupar_noticias_por_similaridade

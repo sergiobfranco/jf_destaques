@@ -22,7 +22,7 @@ from limpeza_setor import limpar_setor
 from limpeza_editoriais import limpar_editoriais
 from limpeza_specials import limpar_specials
 from relevancia import avaliar_relevancia
-from resumos_marcas_rev import agrupar_noticias_por_similaridade
+from resumos_marcas_v2 import agrupar_noticias_por_similaridade
 from prompts_setor import gerar_prompts_setor
 from resumos_setor import gerar_resumos_setor
 from relatorio_preliminar import gerar_versao_preliminar

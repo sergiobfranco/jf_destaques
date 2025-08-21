@@ -1,0 +1,27 @@
+--- relatorio_preliminar.py
++++ relatorio_preliminar.py
+@@ -44,7 +44,7 @@
+     s = get_shortener()
+     # tentativas em cascata
+     for fn in (
+-        lambda _u: safe_shorten(_u),
++        lambda _u: s.short(_u),
+         lambda _u: s.isgd.short(_u),
+         lambda _u: s.dagd.short(_u),
+     ):
+@@ -251,8 +251,14 @@
+         """
+         if df is None or df.empty:
+             return
++        # garante coluna ShortURL com dtype textual para evitar float64
+         if 'ShortURL' not in df.columns:
+-            df['ShortURL'] = None
++            df['ShortURL'] = pd.Series([pd.NA]*len(df), dtype='string')
++        else:
++            try:
++                df['ShortURL'] = df['ShortURL'].astype('string')
++            except Exception:
++                df['ShortURL'] = df['ShortURL'].astype('object')
+         # fontes possíveis de URL
+         fontes = [c for c in ['ShortURL', 'UrlVisualizacao', 'Link'] if c in df.columns]
+         if not fontes:

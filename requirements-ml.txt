@@ -1,0 +1,14 @@
+# Optional ML requirements: install only when you need sentence-transformers / embeddings
+# Use: pip install -r requirements-ml.txt
+sentence-transformers==4.0.2
+
+# Core ML dependencies moved from requirements.txt
+# Using CPU-only versions to avoid installing CUDA files when GPU is not needed
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0+cpu
+transformers==4.51.1
+tokenizers==0.21.1
+safetensors==0.5.3
+
+# Optional: if you need GPU support, comment the line with +cpu and uncomment:
+# torch==2.6.0  # will install with CUDA support if available

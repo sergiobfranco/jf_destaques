@@ -10,10 +10,104 @@ from datetime import datetime
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 
+def converter_asteriscos_em_negrito(paragraph):
+    """
+    Converte texto entre asteriscos (*texto*) em negrito no Word,
+    mantendo os asteriscos visíveis
+    """
+    texto_completo = paragraph.text
+    
+    # Regex para encontrar texto entre asteriscos
+    # Captura *texto* mas não **
+    padrao_asterisco = r'\*([^\*]+)\*'
+    
+    # Limpar o parágrafo atual
+    _limpar_paragrafo(paragraph)
+    
+    # Inicializar posição
+    ultima_posicao = 0
+    
+    # Encontrar todas as ocorrências
+    for match in re.finditer(padrao_asterisco, texto_completo):
+        inicio, fim = match.span()
+        texto_entre_asteriscos = match.group(1)  # Texto sem os asteriscos
+        
+        # Adicionar texto normal antes do próximo asterisco
+        if inicio > ultima_posicao:
+            paragraph.add_run(texto_completo[ultima_posicao:inicio])
+        
+        # Adicionar asterisco inicial
+        paragraph.add_run("*")
+        
+        # Adicionar texto em negrito
+        run_negrito = paragraph.add_run(texto_entre_asteriscos)
+        run_negrito.bold = True
+        
+        # Forçar negrito no XML
+        b = OxmlElement('w:b')
+        b.set(qn('w:val'), 'on')
+        run_negrito._element.get_or_add_rPr().append(b)
+        
+        # Adicionar asterisco final
+        paragraph.add_run("*")
+        
+        # Atualizar posição
+        ultima_posicao = fim
+        
+        print(f"   DEBUG: Aplicando negrito em: '*{texto_entre_asteriscos}*'")
+    
+    # Adicionar texto restante após o último asterisco
+    if ultima_posicao < len(texto_completo):
+        paragraph.add_run(texto_completo[ultima_posicao:])
+    
+    return True
+
+    
+    # Adicionar texto restante após o último asterisco (se houver)
+    if ultima_posicao < len(texto_completo):
+        paragraph.add_run(texto_completo[ultima_posicao:])
+    
+    return True
+
 def _limpar_paragrafo(paragraph):
     # remove todos os runs atuais
     for r in paragraph.runs[::-1]:
         paragraph._p.remove(r._element)
+
+
+def _add_text_preservando_asteriscos(paragraph, texto):
+    """
+    Adiciona texto ao parágrafo criando runs. Se encontrar trechos entre asteriscos
+    (*texto*), mantém os asteriscos e aplica negrito ao texto interno.
+    Não limpa o parágrafo; apenas acrescenta runs.
+    """
+    if not texto:
+        return
+
+    padrao = re.compile(r'\*([^\*]+)\*')
+    ultima = 0
+    for m in padrao.finditer(texto):
+        inicio, fim = m.span()
+        # texto antes
+        if inicio > ultima:
+            paragraph.add_run(texto[ultima:inicio])
+
+        # asterisco inicial
+        paragraph.add_run('*')
+
+        # texto em negrito
+        inner = m.group(1)
+        run_b = paragraph.add_run(inner)
+        run_b.bold = True
+
+        # asterisco final
+        paragraph.add_run('*')
+
+        ultima = fim
+
+    # restante
+    if ultima < len(texto):
+        paragraph.add_run(texto[ultima:])
 
 # Funcao para upload no Google Drive
 def upload_para_google_drive(caminho_arquivo, nome_arquivo, pasta_id):
@@ -127,7 +221,7 @@ def processar_urls_em_paragrafo(paragraph):
             if len(partes) == 2:
                 # Adicionar texto antes da URL (se houver)
                 if partes[0]:
-                    paragraph.add_run(partes[0])
+                    _add_text_preservando_asteriscos(paragraph, partes[0])
 
                 # Criar hyperlink apenas com URL limpa
                 hyperlink_element = adicionar_hyperlink(paragraph, url_limpa, url_limpa)
@@ -135,14 +229,14 @@ def processar_urls_em_paragrafo(paragraph):
                 
                 # Adicionar a pontuacao como texto normal (nao hyperlink)
                 if pontuacao:
-                    paragraph.add_run(pontuacao)
+                    _add_text_preservando_asteriscos(paragraph, pontuacao)
 
                 # Continuar com o resto do texto
                 texto_restante = partes[1]
 
     # Adicionar texto restante apos a ultima URL (se houver)
     if texto_restante:
-        paragraph.add_run(texto_restante)
+        _add_text_preservando_asteriscos(paragraph, texto_restante)
 
     return True
 
@@ -161,11 +255,18 @@ def converter_urls_docx_para_hyperlinks(arquivo_entrada, pasta_destino='/app/out
     # 2 Processar paragrafos principais
     for i, p in enumerate(doc.paragraphs):
         if p.text.strip():
-            urls_antes = len(re.findall(r'https?://[^\s]+', p.text))
+            # Contar URLs no texto original antes de qualquer modificação
+            texto_original = p.text
+            urls_antes = len(re.findall(r'https?://[^\s]+', texto_original))
+
+            # Primeiro tentar processar URLs (que pode reconstruir o parágrafo)
             if processar_urls_em_paragrafo(p):
                 total_paragrafos_processados += 1
                 total_urls_convertidas += urls_antes
                 print(f"   Paragrafo {i+1} processado com {urls_antes} URLs")
+            else:
+                # Se não havia URLs, aplicar conversão de asteriscos normalmente
+                converter_asteriscos_em_negrito(p)
 
     # 3 Processar tabelas
     for table in doc.tables:
@@ -173,10 +274,17 @@ def converter_urls_docx_para_hyperlinks(arquivo_entrada, pasta_destino='/app/out
             for cell in row.cells:
                 for p in cell.paragraphs:
                     if p.text.strip():
-                        urls_antes = len(re.findall(r'https?://[^\s]+', p.text))
+                        # Contar URLs no texto original antes de qualquer modificação
+                        texto_original = p.text
+                        urls_antes = len(re.findall(r'https?://[^\s]+', texto_original))
+
+                        # Primeiro tentar processar URLs (pode reconstruir o parágrafo)
                         if processar_urls_em_paragrafo(p):
                             total_paragrafos_processados += 1
                             total_urls_convertidas += urls_antes
+                        else:
+                            # Se não havia URLs, aplicar conversão de asteriscos normalmente
+                            converter_asteriscos_em_negrito(p)
 
     # 4 Gerar nome do arquivo final
     nome_base = os.path.basename(arquivo_entrada).replace('.docx', '')

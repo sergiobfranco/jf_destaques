@@ -2,8 +2,12 @@ services:
   relatorio:
     build: .
     container_name: destaques_jf_diario
+    ports:
+      - "8561:8561"  # Expor porta do Streamlit
     volumes:
       - "/G/Drives compartilhados/Atendimento Infra/J&F/automacao:/app/output"  # Mapear a pasta de relatórios
+      - "/home/boxadmin/jf-relatorio/output:/app/output"  # Mapear a pasta de relatórios
     environment:
       - TZ=America/Sao_Paulo   # Ajustar fuso horário
+      - PYTHONUNBUFFERED=1     # Para ver logs em tempo real      
     restart: unless-stopped

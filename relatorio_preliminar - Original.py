@@ -401,41 +401,35 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
     # --- Fim da Seção Original para resumos de Marca - NOTÍCIAS IRRELEVANTES ---
 
-    # Substitua a seção problemática (linhas ~410-420) por este código mais simples:
-
     # --- Início da seção links das notícias por Marcas ---
     # Juntar os dois dataframes de notícias de marca (relevantes e irrelevantes)
     final_df_small_marca_combined = pd.concat([final_df_small_marca, final_df_small_marca_irrelevantes], ignore_index=True)
 
-    # CORREÇÃO: Remover registros com Canais em branco/nulo
-    final_df_small_marca_combined = final_df_small_marca_combined.dropna(subset=['Canais'])
-    final_df_small_marca_combined = final_df_small_marca_combined[final_df_small_marca_combined['Canais'].str.strip() != '']
-
-    print(f"\nVerificando final_df_small_marca_combined após limpeza:")
+    # DEBUG: Check final_df_small_marca_combined before sorting
+    print(f"\nVerificando final_df_small_marca_combined antes de ordenar para links:")
     print(f"  Tem {len(final_df_small_marca_combined)} linhas.")
+    print(f"  Tem coluna 'Canais'? {'Canais' in final_df_small_marca_combined.columns}")
 
     if not final_df_small_marca_combined.empty and 'Canais' in final_df_small_marca_combined.columns:
         try:
-            # Criar ordem de classificação
-            marcas_unicas = final_df_small_marca_combined['Canais'].unique()
-            order = [marca1, marca2] + [marca for marca in marcas_unicas if marca not in (marca1, marca2)]
-            
-            final_df_small_marca_sorted = final_df_small_marca_combined.sort_values(
-                by=['Canais'], 
-                key=lambda x: pd.Categorical(x, categories=order, ordered=True)
-            )
+            order = [marca1, marca2] + [marca for marca in final_df_small_marca_combined['Canais'].unique() if marca not in (marca1, marca2)]
+            final_df_small_marca_sorted = final_df_small_marca_combined.sort_values(by=['Canais'], key=lambda x: pd.Categorical(x, categories=order, ordered=True))
             print("Ordenação personalizada dos links por Marca aplicada.")
 
-        except Exception as e:
-            print(f"Erro na ordenação personalizada: {e}. Usando ordenação padrão.")
+            #print("Conteúdo de final_df_small_marca_sorted gerado try:")
+            #print(final_df_small_marca_sorted[['Canais', 'Veiculo', 'Titulo', 'Link']])
+
+        except (NameError, KeyError, AttributeError) as e:
+            print(f"Aviso: Falha na ordenação personalizada dos links por Marca ({type(e).__name__}: {e}). Verifique se marca1, marca2 e w_marcas estão definidos corretamente.")
+            print("Ordenando por Canais padrão.")
             final_df_small_marca_sorted = final_df_small_marca_combined.sort_values(by=['Canais'])
 
-        # Resto do código continua igual...
+            #print("Conteúdo de final_df_small_marca_sorted gerado try:")
+            #print(final_df_small_marca_sorted[['Canais', 'Veiculo', 'Titulo', 'Link']])
+
         document.add_paragraph("")
         document.add_paragraph("--- LINKS DAS NOTÍCIAS DE MARCA ---")
         document.add_paragraph("")
-        
-        # ... resto do código de processamento dos links ...
 
         current_marca = None
 

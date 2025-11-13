@@ -224,7 +224,7 @@ def avaliar_relevancia(df):
         #final_df_small_marca_processed.to_excel(arq_api, index=False)
         print(f"Arquivo {arq_api} sobrescrito após remoção de registros que não foram considerados relevantes/prioritários (coluna RelevanciaMarca já existia).")
         
-        return final_df_small_marca_processed
+        return final_df_small_marca_processed, df_irrelevantes
         # --- Fim do novo ajuste (caso a coluna já existisse) ---
 
 

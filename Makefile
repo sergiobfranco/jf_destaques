@@ -1,3 +1,5 @@
+.PHONY: default build run full clean nuke activate check
+
 # Caminho do docker-compose.yml (se quiser customizar)
 COMPOSE_FILE=docker-compose.yml
 
@@ -9,6 +11,13 @@ TIMESTAMP=$(shell date +"%Y-%m-%d_%H-%M-%S")
 
 # Alvo padrão: executa normalmente
 default: run
+
+# Ativa ambiente virtual e checa
+activate:
+	@powershell -Command "& .\venv\Scripts\Activate.ps1; Get-Command python"
+
+check:
+	@powershell -Command "Get-Command python"
 
 # Apenas build da imagem
 build:

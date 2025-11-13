@@ -268,66 +268,14 @@ def gerar_resumos_setor(df):
     # ===============================================================
 
     def resumir_prompt(prompt_text, tema="", row_id=""):
-        # Adicionar instrução explícita para evitar frases introdutórias E neutralidade
-        prompt_completo = f"""INSTRUÇÕES IMPORTANTES:
-
-1. Forneça APENAS o resumo, sem frases introdutórias como "aqui está um resumo", "baseado no texto fornecido", "o resumo é", ou similares.
-
-2. NEUTRALIDADE OBRIGATÓRIA:
-   - Relate apenas FATOS objetivos e verificáveis
-   - NÃO use adjetivos elogiosos ou bajuladores (inovador, revolucionário, líder, excelente, incrível, extraordinário, etc.)
-   - NÃO faça juízos de valor sobre marcas, empresas ou entidades
-   - NÃO reproduza linguagem de marketing ou promocional presente no texto original
-   - Mantenha tom jornalístico neutro e factual
-   - Se há críticas ou problemas, relate-os objetivamente sem suavizar
-
-3. FOCO EM FATOS:
-   - O que aconteceu (ações concretas)
-   - Quando aconteceu (datas, períodos)
-   - Dados numéricos e estatísticos
-   - Anúncios, eventos específicos
-   - Resultados mensuráveis
-
-{prompt_text}"""
-        
         payload = {
             "model": "deepseek-chat",
             "messages": [
-                {
-                    "role": "system", 
-                    "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é relatar fatos objetivamente sobre qualquer tema ou setor, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra, direta e imparcial."
-                },
-                {
-                    "role": "user", 
-                    "content": prompt_completo
-                }
+                {"role": "system", "content": "Você é um jornalista profissional especializado em resumir notícias."},
+                {"role": "user", "content": prompt_text}
             ],
             "temperature": 0.7
         }
-        
-        def limpar_frases_introdutorias(texto):
-            """Remove frases introdutórias comuns que o LLM pode adicionar"""
-            if not texto:
-                return texto
-            
-            # Padrões de frases introdutórias a remover (case-insensitive)
-            padroes_remover = [
-                r'^aqui está um resumo.*?:\s*',
-                r'^aqui está o resumo.*?:\s*',
-                r'^segue um resumo.*?:\s*',
-                r'^baseado no texto fornecido,?\s*o resumo.*?:\s*',
-                r'^baseado no texto fornecido,?\s*',
-                r'^o resumo para a marca.*?:\s*',
-                r'^o resumo é:?\s*',
-                r'^resumo:?\s*',
-                r'^segue:?\s*',
-            ]
-            
-            texto_limpo = texto.strip()
-            for padrao in padroes_remover:
-                texto_limpo = re.sub(padrao, '', texto_limpo, flags=re.IGNORECASE)
-            
-            return texto_limpo.strip()
 
         # Implementar retry com backoff
         for tentativa in range(3):
@@ -339,8 +287,7 @@ def gerar_resumos_setor(df):
                 
                 # Verificar se o resultado não está vazio
                 if resultado and resultado.strip():
-                    # Aplicar limpeza de frases introdutórias antes de retornar
-                    return limpar_frases_introdutorias(resultado)
+                    return resultado.strip()
                 else:
                     print(f"⚠️ Resposta vazia na tentativa {tentativa + 1}")
                     

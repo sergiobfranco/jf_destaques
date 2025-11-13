@@ -1,7 +1,12 @@
 # Gera os prompts de Setor
 
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
+try:
+    # Import lazily - só necessário se for instanciar o modelo de embeddings
+    from sentence_transformers import SentenceTransformer, util  # type: ignore
+    _HAS_SENTENCE_TRANSFORMERS = True
+except Exception:
+    _HAS_SENTENCE_TRANSFORMERS = False
 from sklearn.cluster import DBSCAN
 import numpy as np
 import time
@@ -16,7 +21,12 @@ def gerar_prompts_setor(df):
     df['TextoCompleto'] = df['Titulo'].fillna('') + '. ' + df['Conteudo'].fillna('')
 
     # 2. Carrega o modelo de embeddings (ainda não usaremos para filtragem, mas pode ser útil para outras análises)
-    # model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+    # Carregue o modelo somente se a biblioteca estiver disponível e você realmente precisar
+    # Exemplo:
+    # if _HAS_SENTENCE_TRANSFORMERS:
+    #     model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+    # else:
+    #     model = None
 
     # 3. Identificar notícias relacionadas aos temas (usando frequência de termos) e calcular a pontuação de relevância
     temas_termos = {
@@ -263,16 +273,17 @@ def gerar_prompts_setor(df):
                       "bndes", "banco de desenvolvimento", "agência de fomento", \
                       "investimento estrangeiro", \
                       "oferta pública"],        
-        "Setor de Agronegócios": ["agronegócio", "agro", "pecuária", "lavoura", "safra", "colheita", "grãos", "soja", "milho", "carne", "laranja", \
+        "Setor de Agronegócios": ["agronegócio", "agro", "pecuária", "lavoura", "safra", "colheita", "carne", "carnes", "laranja", \
                                 "exportação agrícola", "rural", "agribusiness", "gripe aviária", "avícolas", "derivados", "frango", "ovos", \
                                 "cacau", "crédito rural", "h5n1", "rastreabilidade", "tecnologia agrícola", "inovação agrícola", "caprinos", \
                                 "ovinos", "abpa", "agricultura", "alimentos", "alimentação", "segurança alimentar", \
                                 "subnutrição", "nutrição", "fao", \
                                 
                                 # Culturas e produtos agrícolas adicionais
-                                "trigo", "arroz", "feijão", "café", "cana-de-açúcar", "algodão", "girassol", "canola", "amendoim", \
+                                "arroz", "feijão", "cana-de-açúcar", "algodão", "girassol", "canola", "amendoim", \
                                 "mandioca", "batata", "tomate", "banana", "manga", "abacaxi", "uva", "maçã", "açaí", "guaraná", \
                                 "eucalipto", "pinus", "seringueira", "dendê", "castanha", "quinoa", "chia", "aveia", \
+                                "aves", "bezerro", "gado", "boi", "bovina", "suína", 
                                 
                                 # Pecuária e produtos animais
                                 "bovinos", "suínos", "aves", "peixes", "aquicultura", "piscicultura", "leite", "queijo", "manteiga", \
@@ -301,7 +312,7 @@ def gerar_prompts_setor(df):
                                 "implementos", \
                                 
                                 # Organizações e instituições
-                                "embrapa", "incra", "ibge", "ministério da agricultura", "cna", "ocb", \
+                                "embrapa", "incra", "ibge", "ministério da agricultura", "ministério da agricultura e pecuária (mapa)", "cna", "ocb", \
                                 "faeg", "faesp", "faerj", "sindicatos rurais", "cooperativas", "agroindústria", \
                                 "usinas", "frigoríficos", \
                                 
@@ -1233,6 +1244,54 @@ def gerar_prompts_setor(df):
     # Separar os resultados em novas colunas
     df['RelevanceScore'], df['TemaPreponderante'] = zip(*results)
 
+    # ========================================
+    # BÔNUS DE 100 PONTOS PARA TERMOS NO TÍTULO
+    # ========================================
+    
+    print("Aplicando bônus de 100 pontos para termos específicos no título...")
+    
+    # Lista de termos que garantem bônus de 100 pontos quando aparecem no título
+    termos_bonus = [
+        "aves", "bezerro", "boi", "bovina", "carne", "carnes", "frango", "gado", 
+        "gripe aviária", "suína", "abpa", "ministério da agricultura e pecuária", 
+        "mapa", "alunos", "educação", "ensino médio", "energia", "inflação", 
+        "juro", "juros", "tarifaço", "varejo", "vendas", "descarbonização", 
+        "amazônia", "camada de ozônio", "cop30", "ibama", "política climática", 
+        "mineração", "câmara", "centro", "direita", "esquerda", "ex-presidente", 
+        "governo", "lula", "presidente", "tarcísio",
+        # inclusões em 10/11/25 - início
+        "agricultores", "agro", "fertilizantes", # inclusões em 10/11/25 Agro
+        "aneel",
+        "Drex", "itaú", "imposto de renda",
+        "judiciário",
+        "ambiental", "aquecimento", "climático", "efeito estufa", "gases",
+        "pt", "Trump"
+        # inclusões em 10/11/25 - fim
+    ]
+    
+    def verificar_bonus_titulo(titulo):
+        """Verifica se o título contém algum dos termos que garantem bônus"""
+        if pd.isna(titulo):
+            return False
+        titulo_lower = titulo.lower()
+        for termo in termos_bonus:
+            if re.search(r'\b' + re.escape(termo.lower()) + r'\b', titulo_lower):
+                return True
+        return False
+    
+    # Aplicar o bônus de 100 pontos
+    df['TemBonusTitulo'] = df['Titulo'].apply(verificar_bonus_titulo)
+    df.loc[df['TemBonusTitulo'], 'RelevanceScore'] += 100
+    
+    # Informar quantas notícias receberam o bônus
+    num_noticias_com_bonus = df['TemBonusTitulo'].sum()
+    print(f"✓ {num_noticias_com_bonus} notícias receberam bônus de 100 pontos no título")
+    
+    # ========================================
+    # FIM DO BÔNUS
+    # ========================================
+
+
     # Salvar o DataFrame completo com RelevanceScore
     print("Salvando o DataFrame com RelevanceScore..." )
     df.to_excel(arq_relevance_score_setor, index=False)
@@ -1318,6 +1377,22 @@ def gerar_prompts_setor(df):
     df_top_noticias = pd.concat(df_top_noticias_list, ignore_index=True)
 
     # 6. Criar prompts para cada notícia selecionada
+
+    # Dicionário de mapeamento dos temas
+    mapeamento_temas = {
+        "Setor de Papel e Celulose": "PAPEL E CELULOSE",
+        "Setor de Mineração": "MINERAÇÃO",
+        "Setor de Agronegócios": "AGRONEGÓCIOS",
+        "Setor de Educação": "EDUCAÇÃO",
+        "Setor de Energia": "ENERGIA",
+        "Setor de Finanças": "FINANÇAS",
+        "Setor de Óleo de Gás": "ÓLEO E GÁS",
+        "Justiça": "JUSTIÇA",
+        "Meio Ambiente e ESG": "MEIO AMBIENTE E ESG",
+        "Política - Governo e Congresso Nacional": "POLÍTICA",
+        "Setor de Esportes": "ESPORTES"
+    }
+
     prompts = []
     for index, row in df_top_noticias.iterrows():
         texto_noticia = row['TextoCompleto']
@@ -1325,6 +1400,9 @@ def gerar_prompts_setor(df):
         ids_noticia = str(row['Id']) # ID da notícia
         relevance_score = row['RelevanceScore'] # Obter a pontuação de relevância
         id_veiculo_noticia = row['IdVeiculo'] # Obter o IdVeiculo da notícia
+
+        # Aplicar o mapeamento do tema
+        tema_formatado = mapeamento_temas.get(tema_preponderante, tema_preponderante)
 
         # Criar o prompt
         corpo = texto_noticia
@@ -1338,7 +1416,7 @@ def gerar_prompts_setor(df):
             "Ids": ids_noticia,
             "Tipo": "Notícia Individual",
             "Prompt": prompt,
-            "Tema": tema_preponderante, # Adicionar coluna de Tema Preponderante
+            "Tema": tema_formatado, # Usar o tema formatado
             "RelevanceScore": relevance_score, # Adicionar a pontuação de relevância
             "IdVeiculo": id_veiculo_noticia # Adicionar o IdVeiculo
         })

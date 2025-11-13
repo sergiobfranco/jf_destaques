@@ -104,11 +104,11 @@ marcas_prioridade = ['J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior
                      'Canal Rural', 'Braskem', 'Instituto J&F']
 lista_setores = ["Setor de Papel e Celulose", "Setor de Mineração", "Setor de Agronegócios", "Setor de Educação", "Setor de Energia", "Setor de Óleo de Gás", "Justiça", \
                  "Meio Ambiente e ESG", "Política - Governo e Congresso Nacional"]
-qt_politica = 12   # 24%
-qt_financas = 11   # 21%
-qt_justica = 8    # 16%
-qt_agro = 8      # 16%
-qt_demais = 11    # 21%
+qt_politica = 15   # 25%
+qt_financas = 14   # 23%
+qt_justica = 10    # 17%
+qt_agro = 9      # 15%
+qt_demais = 13    # 20%
 # Marcas que vêm em primeiro e segundo lugar no relatório
 marca1 = 'J&F'
 marca2 = 'JBS'

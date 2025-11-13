@@ -52,24 +52,101 @@ def carregar_configs(caminho_json):
     with open(caminho_json, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def consultar_apis(configs, max_tentativas=5):
+import requests
+import time
+import pandas as pd
+
+def consultar_apis(configs, max_tentativas=3, timeout_base=30):
+    """
+    Consulta APIs com retry automático e timeouts progressivos
+    Versão simplificada sem dependências extras
+    
+    Args:
+        configs: Lista de configurações das APIs
+        max_tentativas: Número máximo de tentativas por API
+        timeout_base: Timeout base em segundos
+    """
     lista_df = []
-    for config in configs:
+    
+    for i, config in enumerate(configs):
         url = config.get("url")
         data = config.get("data")
-        print(f"Consultando API: {url}")
-        try:
-            response = requests.post(url, json=data, timeout=30)
-            if response.status_code == 200:
-                dados = response.json()
-                df_api = pd.DataFrame(dados)
-                lista_df.append(df_api)
-                print(f"✔️ Sucesso: {len(df_api)} registros")
-            else:
-                print(f"❌ Erro {response.status_code} para URL: {url}")
-        except Exception as e:
-            print(f"❌ Exceção ao consultar {url}: {str(e)}")
-    return pd.concat(lista_df, ignore_index=True) if lista_df else pd.DataFrame()
+        print(f"Consultando API {i+1}/{len(configs)}: {url}")
+        
+        sucesso = False
+        
+        for tentativa in range(1, max_tentativas + 1):
+            try:
+                # Timeout progressivo: 30s, 60s, 90s
+                timeout_atual = timeout_base + (tentativa - 1) * 30
+                
+                print(f"  Tentativa {tentativa}/{max_tentativas} (timeout: {timeout_atual}s)")
+                
+                response = requests.post(
+                    url, 
+                    json=data, 
+                    timeout=timeout_atual
+                )
+                
+                if response.status_code == 200:
+                    dados = response.json()
+                    df_api = pd.DataFrame(dados)
+                    lista_df.append(df_api)
+                    print(f"  ✅ Sucesso: {len(df_api)} registros")
+                    sucesso = True
+                    break
+                    
+                elif response.status_code in [429, 500, 502, 503, 504]:
+                    # Códigos que justificam retry
+                    print(f"  ⚠️ Status {response.status_code} - Tentativa {tentativa}")
+                    if tentativa < max_tentativas:
+                        espera = 5 + (tentativa * 2)  # 7s, 9s, 11s
+                        print(f"  ⏳ Aguardando {espera}s...")
+                        time.sleep(espera)
+                else:
+                    # Outros códigos de erro - não faz retry
+                    print(f"  ❌ Erro {response.status_code} para URL: {url}")
+                    break
+                    
+            except requests.exceptions.Timeout:
+                print(f"  ⏱️ Timeout após {timeout_atual}s na tentativa {tentativa}")
+                if tentativa < max_tentativas:
+                    espera = 10 * tentativa  # 10s, 20s, 30s
+                    print(f"  ⏳ Aguardando {espera}s antes da próxima tentativa...")
+                    time.sleep(espera)
+                    
+            except requests.exceptions.ConnectionError as e:
+                erro_str = str(e)[:100]
+                print(f"  🔌 Erro de conexão na tentativa {tentativa}: {erro_str}...")
+                if tentativa < max_tentativas:
+                    espera = 15 * tentativa  # 15s, 30s, 45s
+                    print(f"  ⏳ Aguardando {espera}s antes da próxima tentativa...")
+                    time.sleep(espera)
+                    
+            except requests.exceptions.RequestException as e:
+                erro_str = str(e)[:100]
+                print(f"  ❌ Erro de requisição na tentativa {tentativa}: {erro_str}...")
+                if tentativa < max_tentativas:
+                    time.sleep(5 * tentativa)
+                    
+            except Exception as e:
+                erro_str = str(e)[:100]
+                print(f"  ❌ Erro inesperado na tentativa {tentativa}: {erro_str}...")
+                if tentativa < max_tentativas:
+                    time.sleep(3 * tentativa)
+        
+        if not sucesso:
+            print(f"  ❌ FALHA: Todas as {max_tentativas} tentativas falharam para {url}")
+            print(f"  ⚠️ Continuando com as próximas APIs...")
+    
+    if lista_df:
+        resultado = pd.concat(lista_df, ignore_index=True)
+        print(f"\n📊 Total consolidado: {len(resultado)} registros de {len(lista_df)} APIs bem-sucedidas")
+        return resultado
+    else:
+        print(f"\n⚠️ Nenhuma API retornou dados válidos")
+        return pd.DataFrame()
+
 
 def main():
     # 1. Aguarda a data e hora futura fornecida pelo operador
@@ -98,22 +175,69 @@ def main():
     caminho_json = "dados/config/api_marca_configs.json"
     configs = carregar_configs(caminho_json)
     marcas_df = consultar_apis(configs)
-    final_df, final_df_small_bruto = limpar_marcas(marcas_df)
+
+    if marcas_df.empty:
+        print("⚠️ ATENÇÃO: Nenhum registro retornado pelas APIs de MARCAS!")
+        print("📝 Criando DataFrame de MARCAS vazio com estrutura padrão...")
+        colunas_marcas = [
+            'Id', 'Titulo', 'Conteudo', 'UrlOriginal', 'DataVeiculacao', 'IdVeiculo', 'Canais'
+        ]
+        marcas_df = pd.DataFrame(columns=colunas_marcas)
+        final_df = marcas_df.copy()
+        final_df_small_bruto = marcas_df.copy()
+        print("✅ DataFrames vazios criados com sucesso para MARCAS")
+    else:
+        print(f"✅ {len(marcas_df)} registros obtidos para MARCAS")
+        final_df, final_df_small_bruto = limpar_marcas(marcas_df)
+
     final_df.to_excel(arq_api_original, index=False)
 
     # 3. Avaliação de RELEVÂNCIA
-    final_df_small, final_df_small_irrelevantes = avaliar_relevancia(final_df_small_bruto)
+
+    print(f"📊 final_df tem {len(final_df)} registros")
+    print(f"📊 final_df_small_bruto tem {len(final_df_small_bruto)} registros")
+
+    if marcas_df.empty:
+        print("⚠️ ATENÇÃO: Nenhum registro retornado pelas APIs de MARCAS!")
+        print("📝 Criando DataFrame de RELEVÂNCIA vazio com estrutura padrão...")
+        colunas_relevancia = [
+            'Id', 'Titulo', 'Conteudo', 'IdVeiculo', 'Canais', 'TextoCompleto', 'RelevanciaMarca'
+        ]
+        relevancia_df = pd.DataFrame(columns=colunas_relevancia)
+        final_df_small = relevancia_df.copy()
+        final_df_small_irrelevantes = relevancia_df.copy()
+        print("✅ DataFrames vazios de RELEVÂNCIA criados com sucesso para MARCAS")
+    else:
+        final_df_small, final_df_small_irrelevantes = avaliar_relevancia(final_df_small_bruto)
+
+    print(f"📊 final_df_small tem {len(final_df_small)} registros")
+    print(f"📊 final_df_small_irrelevantes tem {len(final_df_small_irrelevantes)} registros")
+
+
     final_df_small.to_excel(arq_api, index=False)
     final_df_small_irrelevantes.to_excel(arq_api_irrelevantes, index=False)
 
     # 4.A Agrupa MARCAS por SIMILARIDADE e gera RESUMOS pelo DeepSeek - Notícias Relevantes
-    df_resumos_marcas = agrupar_noticias_por_similaridade(final_df_small)
+    if final_df_small.empty:
+        colunas_resumos = [
+            'Marca', 'GrupoID', 'QtdNoticias', 'Ids', 'Resumo'
+        ]
+        df_resumos_marcas = pd.DataFrame(columns=colunas_resumos)
+    else:
+        df_resumos_marcas = agrupar_noticias_por_similaridade(final_df_small)
+
+    print(f"📊 df_resumos_marcas resultante tem {len(df_resumos_marcas)} registros")
+
     df_resumos_marcas.to_excel(arq_results, index=False)
 
     # 4.B Agrupa MARCAS por SIMILARIDADE e gera RESUMOS pelo DeepSeek - Notícias Irrelevantes
-    df_resumos_marcas_irrelevantes = agrupar_noticias_por_similaridade(final_df_small_irrelevantes)
-    #df_resumos_marcas_irrelevantes.to_excel(arq_results_irrelevantes, index=False)
-    #df_resumos_marcas_irrelevantes = agrupar_noticias_por_similaridade(final_df_small_irrelevantes)
+    if final_df_small_irrelevantes.empty:
+        colunas_resumos = [
+            'Marca', 'GrupoID', 'QtdNoticias', 'Ids', 'Resumo'
+        ]
+        df_resumos_marcas_irrelevantes = pd.DataFrame(columns=colunas_resumos)
+    else:
+        df_resumos_marcas_irrelevantes = agrupar_noticias_por_similaridade(final_df_small_irrelevantes)
 
     if df_resumos_marcas_irrelevantes is not None and not df_resumos_marcas_irrelevantes.empty:
         df_resumos_marcas_irrelevantes.to_excel(arq_results_irrelevantes, index=False)
@@ -127,23 +251,57 @@ def main():
     caminho_json = "dados/config/api_setor_configs.json"
     configs = carregar_configs(caminho_json)
     setor_df = consultar_apis(configs)
-    final_df_setor, final_df_small_setor = limpar_setor(setor_df)
+
+    if setor_df.empty:
+        print("⚠️ ATENÇÃO: Nenhum registro retornado pelas APIs de SETOR!")
+        print("📝 Criando DataFrame de SETOR vazio com estrutura padrão...")
+        colunas_setor = [
+            'Id', 'Titulo', 'Conteudo', 'UrlOriginal', 'DataVeiculacao', 'IdVeiculo', 'Canais'
+        ]
+        setor_df = pd.DataFrame(columns=colunas_setor)
+        final_df_setor = setor_df.copy()
+        final_df_small_setor = setor_df.copy()
+        print("✅ DataFrames vazios criados com sucesso para SETOR")
+    else:
+        print(f"✅ {len(setor_df)} registros obtidos para SETOR")
+        final_df_setor, final_df_small_setor = limpar_setor(setor_df)
+
     final_df_setor.to_excel(arq_api_original_setor, index=False)
     final_df_small_setor.to_excel(arq_api_setor, index=False)
 
     # 6. Agrupa notícias de SETOR por SIMILARIDADE e gera PROMPTS para resumos
-    df_prompts_setor = gerar_prompts_setor(final_df_small_setor)
+    if final_df_small_setor.empty:
+        df_prompts_setor = pd.DataFrame(columns=['Id', 'Tipo', 'Prompt', 'Tema', 'RelevanceScore', 'IdVeiculo'])
+    else:
+        df_prompts_setor = gerar_prompts_setor(final_df_small_setor)
     df_prompts_setor.to_excel(arq_prompts_setor, index=False)
 
     # 7. Processa RESUMOS de notícias de SETOR
-    df_resumos_setor = gerar_resumos_setor(df_prompts_setor)
+    if df_prompts_setor.empty:
+        df_resumos_setor = pd.DataFrame(columns=['Tema', 'Id', 'Resumo'])
+    else:
+        df_resumos_setor = gerar_resumos_setor(df_prompts_setor)
     df_resumos_setor.to_excel(arq_results_setor, index=False)
 
     # 8. Chamada de API de EDITORIAIS
     caminho_json = "dados/config/api_editorial_configs.json"
     configs = carregar_configs(caminho_json)
     editoriais_df = consultar_apis(configs)
-    final_df_editoriais, final_df_small_editoriais = limpar_editoriais(editoriais_df)
+
+    if editoriais_df.empty:
+        print("⚠️ ATENÇÃO: Nenhum registro retornado pelas APIs de EDITORIAIS!")
+        print("📝 Criando DataFrame de EDITORIAIS vazio com estrutura padrão...")
+        colunas_editoriais = [
+            'Id', 'Titulo', 'Conteudo', 'UrlOriginal', 'DataVeiculacao', 'IdVeiculo', 'Canais'
+        ]
+        editoriais_df = pd.DataFrame(columns=colunas_editoriais)
+        final_df_editoriais = editoriais_df.copy()
+        final_df_small_editoriais = editoriais_df.copy()
+        print("✅ DataFrames vazios criados com sucesso para EDITORIAIS")
+    else:
+        print(f"✅ {len(editoriais_df)} registros obtidos para EDITORIAIS")
+        final_df_editoriais, final_df_small_editoriais = limpar_editoriais(editoriais_df)
+
     final_df_editoriais.to_excel(arq_api_original_editorial, index=False)
     final_df_small_editoriais.to_excel(arq_api_editorial, index=False)
 
@@ -151,7 +309,21 @@ def main():
     caminho_json = "dados/config/api_SPECIALS_configs.json"
     configs = carregar_configs(caminho_json)
     specials_df = consultar_apis(configs)
-    final_df_specials, final_df_small_specials = limpar_specials(specials_df)
+
+    if specials_df.empty:
+        print("⚠️ ATENÇÃO: Nenhum registro retornado pelas APIs de SPECIALS!")
+        print("📝 Criando DataFrame de SPECIALS vazio com estrutura padrão...")
+        colunas_specials = [
+            'Id', 'Titulo', 'Conteudo', 'UrlOriginal', 'DataVeiculacao', 'IdVeiculo', 'Canais'
+        ]
+        specials_df = pd.DataFrame(columns=colunas_specials)
+        final_df_specials = specials_df.copy()
+        final_df_small_specials = specials_df.copy()
+        print("✅ DataFrames vazios criados com sucesso para SPECIALS")
+    else:
+        print(f"✅ {len(specials_df)} registros obtidos para SPECIALS")
+        final_df_specials, final_df_small_specials = limpar_specials(specials_df)
+
     final_df_specials.to_excel(arq_api_original_SPECIALS, index=False)
     final_df_small_specials.to_excel(arq_api_SPECIALS, index=False)
 

@@ -11,5 +11,8 @@ COPY service_account.json /app/service_account.json
 # Instala dependências
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Comando padrão ao iniciar o container
-CMD ["python", "main_docker.py"]
+# Expor a porta do Streamlit
+EXPOSE 8561
+
+# Comando padrão ao iniciar o container (agora com Streamlit)
+CMD ["streamlit", "run", "main_menu.py", "--server.port=8561", "--server.address=0.0.0.0"]

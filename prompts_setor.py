@@ -1202,6 +1202,94 @@ def gerar_prompts_setor(df):
 
     }
 
+    # ---------- INÍCIO: PRE-PROCESSAMENTO (descartar notícias por veículo) ----------
+    # Regras por IdVeiculo (comparação em lowercase). Se um registro corresponder a qualquer regra,
+    # ele será removido do DataFrame antes do restante do processamento.
+    def _should_discard_row(row):
+        try:
+            idv = row.get('IdVeiculo', None)
+        except Exception:
+            idv = None
+
+        titulo = '' if pd.isna(row.get('Titulo', '')) else str(row.get('Titulo', '')).strip().lower()
+        conteudo = '' if pd.isna(row.get('Conteudo', '')) else str(row.get('Conteudo', '')).strip().lower()
+
+        # Build first N lines lists
+        lines = [l.strip() for l in (conteudo.splitlines() if conteudo else [])]
+
+        def any_line_eq(word, n):
+            if not lines:
+                return False
+            lim = min(len(lines), n)
+            for i in range(lim):
+                if lines[i] == word:
+                    return True
+            return False
+
+        def any_line_startswith(prefix, n):
+            if not lines:
+                return False
+            lim = min(len(lines), n)
+            for i in range(lim):
+                if lines[i].startswith(prefix):
+                    return True
+            return False
+
+        # Vehicle-specific rules (all comparisons made in lowercase)
+        if idv == 331:
+            if any_line_eq('análise', 10):
+                return True
+            if any_line_eq('opinião', 10):
+                return True
+            if any_line_eq('réplica', 10):
+                return True
+            if titulo == 'expediente' or any_line_eq('expediente', 5):
+                return True
+
+        if idv == 10459:
+            if any_line_eq('análise', 10):
+                return True
+            if any_line_eq('opinião jurídica', 10):
+                return True
+            if any_line_eq('opinião', 10):
+                return True
+            if titulo == 'expediente' or any_line_eq('expediente', 5):
+                return True
+
+        if idv == 682:
+            if titulo == 'expediente' or any_line_eq('expediente', 5):
+                return True
+            if any_line_eq('análise', 15):
+                return True
+            if any_line_eq('opinião', 15):
+                return True
+
+        if idv == 675:
+            if any_line_eq('espaço aberto', 10):
+                return True
+            if any_line_startswith('notas e informações', 10):
+                return True
+            if titulo == 'expediente':
+                return True
+
+        return False
+
+    # Execute the pre-processing discard step and log summary
+    try:
+        if 'IdVeiculo' in df.columns and 'Conteudo' in df.columns:
+            initial_count = len(df)
+            mask_discard = df.apply(_should_discard_row, axis=1)
+            num_discarded = mask_discard.sum()
+            if num_discarded > 0:
+                print(f"🧹 Pré-processamento: descartando {num_discarded} notícias por regras de veículo (de {initial_count})")
+                # Optionally save the discarded rows for audit/debug (commented)
+                # df[mask_discard].to_csv('dados/api/discarded_prompts_setor.csv', index=False)
+            df = df[~mask_discard].copy()
+    except Exception as e:
+        print(f"⚠️ Erro no pré-processamento de descarte: {e}")
+
+    # ---------- FIM: PRE-PROCESSAMENTO ----------
+
     # Definir os IDs dos veículos prioritários
     veiculos_prioritarios = [10459, 675]
     pontuacao_extra_veiculo = 100 # Pontuação extra para notícias desses veículos (ajuste este valor se necessário)

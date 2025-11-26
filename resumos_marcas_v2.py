@@ -413,38 +413,54 @@ Resuma o conteúdo a seguir em até 60 palavras:
 
     def agrupar_por_similaridade(resumos):
         """
-        Agrupa resumos semanticamente relacionados com critérios explícitos.
-        Retorna lista de IDs de grupo (1 a N) para cada resumo.
+        Agrupa resumos semanticamente relacionados - VERSÃO FINAL OTIMIZADA
         """
         import json
         import re
         
         N = len(resumos)
         
-        # PROMPT APRIMORADO COM CRITÉRIOS EXPLÍCITOS
+        # PROMPT FINAL CONSOLIDADO
         prompt = f"""Você é um especialista em análise de notícias corporativas.
 
-    TAREFA: Agrupe {N} resumos de notícias por SIMILARIDADE SEMÂNTICA FORTE.
+    TAREFA: Agrupe {N} resumos de notícias por SIMILARIDADE TEMÁTICA RELEVANTE.
 
-    CRITÉRIOS DE AGRUPAMENTO (em ordem de prioridade):
-    1. **Mesmo evento/transação específica**: Se mencionam a mesma aquisição, mesmo valor financeiro, mesmas empresas envolvidas → MESMO GRUPO
-    2. **Mesmo escândalo/acontecimento histórico**: Se citam o mesmo evento passado (ex: "Joesley Day", "escândalo de 2017") → MESMO GRUPO
-    3. **Mesma empresa + mesmo contexto**: Se falam da mesma holding/empresa no mesmo contexto temporal (ex: J&F e energia nuclear) → MESMO GRUPO
-    4. **Progressão temporal do mesmo assunto**: Notícias que são continuação/desdobramento uma da outra → MESMO GRUPO
+    CRITÉRIOS INTELIGENTES DE AGRUPAMENTO:
 
-    IMPORTANTE:
-    - Ignore pequenas diferenças de redação
-    - Foque nos FATOS CENTRAIS, não em detalhes secundários
-    - Seja AGRESSIVO no agrupamento: se há 80%+ de sobreposição temática, agrupe
-    - Notícias sobre setores diferentes da mesma empresa devem ficar em grupos separados
+    🎯 **REGRA PRINCIPAL**: 
+    Agrupe quando as notícias compartilham o MESMO CONTEXTO OPERACIONAL ou EVENTO CORRELATO.
+    Separe quando tratam de CONTEXTOS TEMPORAIS ou TEMÁTICOS DISTINTOS.
 
-    EXEMPLOS:
-    - "J&F compra Eletronuclear por R$ 535 mi" + "Irmãos Batista adquirem participação na Eletronuclear" → MESMO GRUPO
-    - "Escândalo Joesley Day em 2017" + "Irmãos Batista absolvidos após Joesley Day" → MESMO GRUPO
-    - "JBS tem queda nas ações" + "J&F compra Eletronuclear" → GRUPOS DIFERENTES (assuntos distintos)
+    ✅ **AGRUPAR QUANDO** (em ordem de prioridade):
+    1. **Mesmo evento econômico + desdobramentos**: IPCA + Selic + projeções institucionais
+    2. **Programa/política + implementação**: Decreto PAT + regras específicas + prazos
+    3. **Transação específica + detalhes**: Aquisição + valores + empresas envolvidas
+    4. **Sequência temporal direta**: Anúncio + resultados + desdobramentos imediatos
+    5. **Diferentes aspectos do mesmo fato**: Medida governamental + impactos setoriais
+
+    ❌ **SEPARAR QUANDO**:
+    1. **Temporalidades desconectadas**: Evento histórico + fato recente sem relação direta
+    2. **Áreas de negócio não relacionadas**: Operações comerciais + questões jurídicas independentes
+    3. **Menção superficial mesma empresa**: Apenas citar mesma empresa em contextos distintos
+    4. **Eventos independentes**: Investigação antitruste + programa governamental antigo
+
+    TESTE DECISÃO PRÁTICO:
+    "Se remover a menção à empresa principal, as notícias ainda fazem sentido juntas?"
+    - SIM → AGRUPAR (ex: políticas econômicas, programas governamentais)
+    - NÃO → SEPARAR (ex: eventos históricos vs fatos recentes não relacionados)
+
+    EXEMPLOS CONCRETOS:
+    - ✅ MESMO GRUPO: "IPCA 0,09%" + "Selic 15%" + "PicPay revisa projeção" → contexto econômico correlato
+    - ✅ MESMO GRUPO: "Decreto PAT" + "Taxas 3,6%" + "Interoperabilidade" → mesma política em implementação
+    - ❌ SEPARAR: "Estratégia campeãs nacionais 2010" + "Investigação EUA 2025" → temporalidades desconectadas
+    - ❌ SEPARAR: "JBS compra empresa X" + "JBS em operação Carne Fraca 2017" → eventos independentes
+
+    BALANCEAMENTO:
+    - Evite agrupamento excessivo (não agrupe temas distintos)
+    - Evite fragmentação excessiva (agrupe contextos correlatos)
+    - Foque em COERÊNCIA TEMÁTICA, não apenas mesma empresa
 
     FORMATO DE SAÍDA (OBRIGATÓRIO):
-    Retorne APENAS uma linha JSON válida, sem comentários, markdown ou texto adicional:
     {{"groups":[g1,g2,...,g{N}]}}
 
     Onde cada g é um número inteiro ≥1. Resumos no mesmo grupo devem ter o mesmo número.
@@ -458,8 +474,8 @@ Resuma o conteúdo a seguir em até 60 palavras:
         data = {
             "model": "deepseek-chat",
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,  # Aumentado de 0 para permitir mais criatividade
-            "max_tokens": 300    # Aumentado para acomodar respostas maiores
+            "temperature": 0.1,  # Baixa para consistência entre execuções
+            "max_tokens": 500    # Suficiente para análise detalhada
         }
         
         try:
@@ -511,7 +527,8 @@ Resuma o conteúdo a seguir em até 60 palavras:
                         grupos_limpos.append(1)
             
             # LOG para debug
-            print(f"✅ Agrupamento concluído: {len(set(grupos_limpos))} grupos distintos de {N} resumos")
+            grupos_distintos = len(set(grupos_limpos))
+            print(f"✅ Agrupamento concluído: {grupos_distintos} grupos distintos de {N} resumos")
             
             return grupos_limpos
             

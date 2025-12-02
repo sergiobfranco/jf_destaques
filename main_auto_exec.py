@@ -28,7 +28,7 @@ from resumos_setor import gerar_resumos_setor
 from relatorio_preliminar import gerar_versao_preliminar
 from relatorio_ajustado_final import gerar_versao_ajustada
 from config import arq_api_original, arq_api, arq_api_irrelevantes, arq_results, arq_results_irrelevantes, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
-    arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final
+    arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final, arq_api_original_raw
 
 def abrir_arquivos_gerados():
     final_df = pd.read_excel(arq_api_original)
@@ -83,6 +83,13 @@ def main_exec():
     caminho_json = "dados/config/api_marca_configs.json"
     configs = carregar_configs(caminho_json)
     marcas_df = consultar_apis(configs)
+    # Save raw API output for audit / replay
+    try:
+        marcas_df.to_excel(arq_api_original_raw, index=False)
+        print(f"Saved raw marcas API output: {arq_api_original_raw} ({len(marcas_df)} records)")
+    except Exception as e:
+        print(f"Warning: could not save raw marcas file: {e}")
+
     final_df, final_df_small_bruto = limpar_marcas(marcas_df)
     final_df.to_excel(arq_api_original, index=False)
 
@@ -112,6 +119,15 @@ def main_exec():
     caminho_json = "dados/config/api_setor_configs.json"
     configs = carregar_configs(caminho_json)
     setor_df = consultar_apis(configs)
+
+    # Salvar arquivo raw de SETOR antes da limpeza
+    from config import arq_api_original_setor_raw
+    try:
+        setor_df.to_excel(arq_api_original_setor_raw, index=False)
+        print(f"Saved raw setor API output: {arq_api_original_setor_raw} ({len(setor_df)} records)")
+    except Exception as e:
+        print(f"Warning: could not save raw setor file: {e}")
+
     final_df_setor, final_df_small_setor = limpar_setor(setor_df)
     final_df_setor.to_excel(arq_api_original_setor, index=False)
     final_df_small_setor.to_excel(arq_api_setor, index=False)

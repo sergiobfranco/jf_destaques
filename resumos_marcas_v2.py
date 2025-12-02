@@ -360,29 +360,74 @@ def agrupar_noticias_por_similaridade(arq_textos):
             
             return texto_limpo.strip()
         
+        # ═══════════════════════════════════════════════════════════════
+        # [NOVA FUNÇÃO] Normalizar datas inventadas
+        # ═══════════════════════════════════════════════════════════════
+        def normalizar_datas_inventadas(texto_resumo):
+            """Remove datas inventadas pelo LLM (meses diferentes do atual)"""
+            import datetime
+            
+            mes_atual = datetime.datetime.now().month
+            
+            meses = {
+                'janeiro': 1, 'fevereiro': 2, 'março': 3, 'abril': 4,
+                'maio': 5, 'junho': 6, 'julho': 7, 'agosto': 8,
+                'setembro': 9, 'outubro': 10, 'novembro': 11, 'dezembro': 12
+            }
+            
+            nome_mes_atual = list(meses.keys())[mes_atual - 1]
+            texto_original = texto_resumo
+            texto_lower = texto_resumo.lower()
+            
+            # Detectar QUALQUER mês diferente do atual
+            for nome_mes, numero_mes in meses.items():
+                if nome_mes in texto_lower and numero_mes != mes_atual:
+                    # Encontrou mês errado! Normalizar
+                    padroes = [
+                        (rf'\b(\d{{1,2}})\s+de\s+{nome_mes}\b', r'recentemente'),
+                        (rf'\bem\s+{nome_mes}\b', r'recentemente'),
+                        (rf'\bde\s+{nome_mes}\b', r'recentemente'),
+                    ]
+                    
+                    for padrao, substituicao in padroes:
+                        texto_resumo = re.sub(padrao, substituicao, texto_resumo, flags=re.IGNORECASE)
+                    
+                    # Log detalhado
+                    print(f"    ⚠️  DATA INVENTADA DETECTADA!")
+                    print(f"        Mês atual: {nome_mes_atual.upper()}")
+                    print(f"        Mês inventado: {nome_mes.upper()}")
+                    print(f"        ANTES: {texto_original[:80]}...")
+                    print(f"        DEPOIS: {texto_resumo[:80]}...")
+                    break
+            
+            return texto_resumo
+        # ═══════════════════════════════════════════════════════════════
+        # FIM DA NOVA FUNÇÃO
+        # ═══════════════════════════════════════════════════════════════
+        
         for tentativa in range(3):
             try:
                 print(f"📝 Gerando resumo curto para notícia ID: {id_}...")
                 prompt = """INSTRUÇÕES IMPORTANTES:
 
-1. Forneça APENAS o resumo da notícia, sem frases introdutórias como "aqui está um resumo", "baseado no texto fornecido", etc.
+    1. Forneça APENAS o resumo da notícia, sem frases introdutórias como "aqui está um resumo", "baseado no texto fornecido", etc.
 
-2. NEUTRALIDADE OBRIGATÓRIA:
-   - Relate apenas FATOS objetivos e verificáveis
-   - NÃO use adjetivos elogiosos ou bajuladores (inovador, revolucionário, líder, excelente, incrível, extraordinário, etc.)
-   - NÃO faça juízos de valor sobre a marca ou seus produtos
-   - NÃO reproduza linguagem de marketing ou promocional presente no texto original
-   - Mantenha tom jornalístico neutro e factual
+    2. NEUTRALIDADE OBRIGATÓRIA:
+    - Relate apenas FATOS objetivos e verificáveis
+    - NÃO use adjetivos elogiosos ou bajuladores (inovador, revolucionário, líder, excelente, incrível, extraordinário, etc.)
+    - NÃO faça juízos de valor sobre a marca ou seus produtos
+    - NÃO reproduza linguagem de marketing ou promocional presente no texto original
+    - Mantenha tom jornalístico neutro e factual
 
-3. FOCO:
-   - O que aconteceu (fatos)
-   - Quando aconteceu
-   - Quem estava envolvido
-   - Dados e números concretos
+    3. FOCO:
+    - O que aconteceu (fatos)
+    - Quando aconteceu
+    - Quem estava envolvido
+    - Dados e números concretos
 
-Resuma o conteúdo a seguir em até 60 palavras:
+    Resuma o conteúdo a seguir em até 60 palavras:
 
-""" + texto
+    """ + texto
                 data = {
                     "model": "deepseek-chat",
                     "messages": [
@@ -402,8 +447,11 @@ Resuma o conteúdo a seguir em até 60 palavras:
                 r.raise_for_status()
                 out = r.json()["choices"][0]["message"]["content"].strip()
                 if out:
-                    # Aplicar limpeza de frases introdutórias antes de retornar
-                    return limpar_frases_introdutorias(out)
+                    # Aplicar limpeza de frases introdutórias
+                    out = limpar_frases_introdutorias(out)
+                    # [NOVO] Aplicar normalização de datas
+                    out = normalizar_datas_inventadas(out)
+                    return out
             except Exception as e:
                 print(f"Resumo60 falhou (tentativa {tentativa+1}) ID {id_}: {e}")
                 time.sleep(1 + tentativa)
@@ -411,32 +459,43 @@ Resuma o conteúdo a seguir em até 60 palavras:
         titulo_e_conteudo = texto[:2000]
         return titulo_e_conteudo[:260]
 
+
     def agrupar_por_similaridade(resumos):
         """
-        Agrupa resumos semanticamente relacionados - VERSÃO FINAL OTIMIZADA
+        Agrupa resumos semanticamente relacionados - VERSÃO v2.1
         """
         import json
         import re
         
         N = len(resumos)
         
-        # PROMPT FINAL CONSOLIDADO
         prompt = f"""Você é um especialista em análise de notícias corporativas.
 
     TAREFA: Agrupe {N} resumos de notícias por SIMILARIDADE TEMÁTICA RELEVANTE.
 
-    CRITÉRIOS INTELIGENTES DE AGRUPAMENTO:
+    🚨 **PRIORIDADE MÁXIMA - EVENTOS IDÊNTICOS** (analise PRIMEIRO):
+    1. Se MÚLTIPLAS notícias reportam o MESMO EVENTO FACTUAL (ex: "anúncio X em data Y", "análise Z publicada em data Y"), elas DEVEM ser agrupadas SEMPRE
+    2. Variações de redação NÃO justificam separação se o evento central é o mesmo
+    3. Diferentes ângulos jornalísticos do MESMO evento pertencem ao MESMO GRUPO
+    4. **[IMPORTANTE] DATAS PRÓXIMAS NO MESMO MÊS**: Se notícias sobre a MESMA transação empresarial (mesmas empresas + mesmo tipo de operação) têm datas no mesmo período (ex: "25 de junho" vs "25 de novembro"), mas TODOS os outros detalhes são consistentes, considere que pode ser variação na data de divulgação ou erro de transcrição → AGRUPAR
+    5. Exemplos práticos:
+       - ✅ AGRUPAR: "JBS anuncia fusão em 25/11" + "JBS e Viva criam joint venture" + "Gigante do couro nasce de fusão JBS-Viva" → MESMO evento, datas próximas
+       - ✅ AGRUPAR: "JBS cria JBS Viva 25/jun, 50% cada, 31 fábricas" + "JBS Viva anunciada 25/nov, 50% cada, 31 fábricas" → MESMO evento (detalhes idênticos, data pode variar)
+       - ✅ AGRUPAR: "Itaú BBA eleva preço-alvo JBS para US$ 20" + "JBS deve subir 37% diz BBA" → MESMA análise financeira
 
-    🎯 **REGRA PRINCIPAL**: 
+    CRITÉRIOS SECUNDÁRIOS (aplicar APÓS verificar eventos idênticos):
+
+    🎯 **REGRA GERAL**: 
     Agrupe quando as notícias compartilham o MESMO CONTEXTO OPERACIONAL ou EVENTO CORRELATO.
     Separe quando tratam de CONTEXTOS TEMPORAIS ou TEMÁTICOS DISTINTOS.
 
     ✅ **AGRUPAR QUANDO** (em ordem de prioridade):
-    1. **Mesmo evento econômico + desdobramentos**: IPCA + Selic + projeções institucionais
-    2. **Programa/política + implementação**: Decreto PAT + regras específicas + prazos
-    3. **Transação específica + detalhes**: Aquisição + valores + empresas envolvidas
-    4. **Sequência temporal direta**: Anúncio + resultados + desdobramentos imediatos
-    5. **Diferentes aspectos do mesmo fato**: Medida governamental + impactos setoriais
+    1. **MESMO EVENTO FACTUAL**: Múltiplas reportagens do mesmo acontecimento (mesmo se redação diferente)
+    2. **Mesmo evento econômico + desdobramentos**: IPCA + Selic + projeções institucionais
+    3. **Programa/política + implementação**: Decreto PAT + regras específicas + prazos
+    4. **Transação específica + detalhes**: Aquisição + valores + empresas envolvidas
+    5. **Sequência temporal direta**: Anúncio + resultados + desdobramentos imediatos
+    6. **Diferentes aspectos do mesmo fato**: Medida governamental + impactos setoriais
 
     ❌ **SEPARAR QUANDO**:
     1. **Temporalidades desconectadas**: Evento histórico + fato recente sem relação direta
@@ -444,21 +503,37 @@ Resuma o conteúdo a seguir em até 60 palavras:
     3. **Menção superficial mesma empresa**: Apenas citar mesma empresa em contextos distintos
     4. **Eventos independentes**: Investigação antitruste + programa governamental antigo
 
-    TESTE DECISÃO PRÁTICO:
+    TESTES DE DECISÃO PRÁTICOS:
+
+    TESTE 1 - IDENTIDADE DE EVENTO (usar PRIMEIRO):
+    "As notícias reportam o MESMO acontecimento factual (data, empresa, ação específica)?"
+    - SIM → AGRUPAR OBRIGATORIAMENTE (ex: múltiplas reportagens de "fusão JBS-Viva 25/11")
+    - NÃO → Aplicar TESTE 2
+
+    TESTE 2 - COERÊNCIA TEMÁTICA (usar se TESTE 1 = NÃO):
     "Se remover a menção à empresa principal, as notícias ainda fazem sentido juntas?"
     - SIM → AGRUPAR (ex: políticas econômicas, programas governamentais)
     - NÃO → SEPARAR (ex: eventos históricos vs fatos recentes não relacionados)
 
     EXEMPLOS CONCRETOS:
+
+    PRIORIDADE 1 - MESMO EVENTO (AGRUPAR SEMPRE):
+    - ✅ MESMO GRUPO: "JBS anuncia fusão" + "JBS e Viva criam JBS Viva" + "Gigante do couro nasce" → mesmo evento (fusão 25/11)
+    - ✅ MESMO GRUPO: "BBA eleva alvo JBS US$ 20" + "JBS deve subir 37%" → mesma análise financeira
+    - ✅ MESMO GRUPO: "Avião J&F em Caracas domingo" + "Jato JBS pousa na Venezuela" → mesmo voo
+
+    PRIORIDADE 2 - CONTEXTO CORRELATO:
     - ✅ MESMO GRUPO: "IPCA 0,09%" + "Selic 15%" + "PicPay revisa projeção" → contexto econômico correlato
     - ✅ MESMO GRUPO: "Decreto PAT" + "Taxas 3,6%" + "Interoperabilidade" → mesma política em implementação
+
+    SEPARAR:
     - ❌ SEPARAR: "Estratégia campeãs nacionais 2010" + "Investigação EUA 2025" → temporalidades desconectadas
     - ❌ SEPARAR: "JBS compra empresa X" + "JBS em operação Carne Fraca 2017" → eventos independentes
 
     BALANCEAMENTO:
     - Evite agrupamento excessivo (não agrupe temas distintos)
     - Evite fragmentação excessiva (agrupe contextos correlatos)
-    - Foque em COERÊNCIA TEMÁTICA, não apenas mesma empresa
+    - Foque em IDENTIDADE DE EVENTO primeiro, COERÊNCIA TEMÁTICA depois
 
     FORMATO DE SAÍDA (OBRIGATÓRIO):
     {{"groups":[g1,g2,...,g{N}]}}
@@ -474,8 +549,8 @@ Resuma o conteúdo a seguir em até 60 palavras:
         data = {
             "model": "deepseek-chat",
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,  # Baixa para consistência entre execuções
-            "max_tokens": 500    # Suficiente para análise detalhada
+            "temperature": 0.1,
+            "max_tokens": 500
         }
         
         try:
@@ -483,7 +558,6 @@ Resuma o conteúdo a seguir em até 60 palavras:
             resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"].strip()
             
-            # Parser robusto para extrair JSON
             m = re.search(r'\{.*\}', content, flags=re.DOTALL)
             if m:
                 try:
@@ -493,27 +567,22 @@ Resuma o conteúdo a seguir em até 60 palavras:
                     print(f"⚠️ Erro ao parsear JSON: {e}")
                     grupos = []
             else:
-                # Fallback: tentar extrair números diretamente
                 grupos = []
             
-            # Validação e normalização dos grupos
             if not grupos or len(grupos) != N:
                 print(f"⚠️ Resposta inválida da API. Extraindo números como fallback...")
                 nums = list(map(int, re.findall(r'\d+', content)))
                 grupos = nums[:N] if len(nums) >= N else []
             
-            # Se ainda falhar, usa agrupamento sequencial
             if not grupos or len(grupos) != N:
                 print(f"⚠️ Usando agrupamento sequencial (fallback total)")
                 grupos = list(range(1, N + 1))
             
-            # Ajustar comprimento se necessário
             if len(grupos) < N:
                 grupos += [grupos[-1]] * (N - len(grupos))
             elif len(grupos) > N:
                 grupos = grupos[:N]
             
-            # Normalizar para escalares (resolver problema de listas aninhadas)
             grupos_limpos = []
             for grupo in grupos:
                 if isinstance(grupo, list):
@@ -526,7 +595,6 @@ Resuma o conteúdo a seguir em até 60 palavras:
                     except (ValueError, TypeError):
                         grupos_limpos.append(1)
             
-            # LOG para debug
             grupos_distintos = len(set(grupos_limpos))
             print(f"✅ Agrupamento concluído: {grupos_distintos} grupos distintos de {N} resumos")
             
@@ -534,8 +602,9 @@ Resuma o conteúdo a seguir em até 60 palavras:
             
         except Exception as e:
             print(f"❌ Erro ao agrupar resumos: {e}")
+            import traceback
             traceback.print_exc()
-            return list(range(1, N + 1))  # Fallback: cada resumo em grupo separado
+            return list(range(1, N + 1))
 
     def agrupar_por_similaridade_original(resumos):
         import json, re

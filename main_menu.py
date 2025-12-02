@@ -30,6 +30,7 @@ from relatorio_preliminar_segmentado import gerar_versao_preliminar
 from relatorio_ajustado_final import gerar_versao_ajustada
 from config import arq_api_original, arq_api, arq_api_irrelevantes, arq_results, arq_results_irrelevantes, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
     arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final
+from config import arq_api_original_raw
 
 # Variável global para armazenar a opção selecionada
 opcao_selecionada = None
@@ -293,6 +294,13 @@ def processar_relatorio():
             configs = carregar_configs(caminho_json)
             marcas_df = consultar_apis(configs)
 
+            # Save raw API output for MARCAS (always save the raw payload before any cleaning)
+            try:
+                marcas_df.to_excel(arq_api_original_raw, index=False)
+                st.info(f"💾 Favoritos (raw) de MARCAS salvos: {arq_api_original_raw} ({len(marcas_df)} registros)")
+            except Exception as e:
+                st.warning(f"⚠️ Não foi possível salvar arquivo raw de MARCAS: {e}")
+
             if marcas_df.empty:
                 st.warning("⚠️ ATENÇÃO: Nenhum registro retornado pelas APIs de MARCAS!")
                 st.info("🔍 Criando DataFrame de MARCAS vazio com estrutura padrão...")
@@ -421,20 +429,27 @@ def processar_relatorio():
             
             setor_df = consultar_apis(configs)
 
+            # Salvar arquivo raw de SETOR antes da limpeza
+            from config import arq_api_original_setor_raw
+            try:
+                setor_df.to_excel(arq_api_original_setor_raw, index=False)
+                st.info(f"\ud83d\udcbe Favoritos (raw) de SETOR salvos: {arq_api_original_setor_raw} ({len(setor_df)} registros)")
+            except Exception as e:
+                st.warning(f"\u26a0\ufe0f N\u00e3o foi poss\u00edvel salvar arquivo raw de SETOR: {e}")
+
             if setor_df.empty:
-                st.warning("⚠️ ATENÇÃO: Nenhum registro retornado pelas APIs de SETOR!")
-                st.info("🔍 Criando DataFrame de SETOR vazio com estrutura padrão...")
+                st.warning("\u26a0\ufe0f ATEN\u00c7\u00c3O: Nenhum registro retornado pelas APIs de SETOR!")
+                st.info("\ud83d\udd0d Criando DataFrame de SETOR vazio com estrutura padr\u00e3o...")
                 colunas_setor = [
                     'Id', 'Titulo', 'Conteudo', 'UrlOriginal', 'DataVeiculacao', 'IdVeiculo', 'Canais'
                 ]
                 setor_df = pd.DataFrame(columns=colunas_setor)
                 final_df_setor = setor_df.copy()
                 final_df_small_setor = setor_df.copy()
-                st.success("✅ DataFrames vazios criados com sucesso para SETOR")
+                st.success("\u2705 DataFrames vazios criados com sucesso para SETOR")
             else:
-                st.success(f"✅ {len(setor_df)} registros obtidos para SETOR")
+                st.success(f"\u2705 {len(setor_df)} registros obtidos para SETOR")
                 final_df_setor, final_df_small_setor = limpar_setor(setor_df)
-
             final_df_setor.to_excel(arq_api_original_setor, index=False)
             final_df_small_setor.to_excel(arq_api_setor, index=False)
 

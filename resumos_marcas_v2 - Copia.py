@@ -66,8 +66,9 @@ def carregar_verbos_iniciais():
                 continue
             
             # Identificar se é singular ou plural baseado na terminação
-            # Plural: repercutem, apontam, destacam, divulgam, informam, trazem, publicam, comunicam, mostram
-            if any(texto.endswith(sufixo) for sufixo in ['em que', 'em', 'ção']):
+            # Plural termina com: 'am que', 'em que', 'ão que'
+            # Exemplos: divulgam que, trazem que, trazem divulgação que
+            if any(texto.endswith(sufixo) for sufixo in ['am que', 'em que', 'ão que']):
                 verbos_plural.append(texto)
             else:
                 verbos_singular.append(texto)
@@ -81,6 +82,114 @@ def carregar_verbos_iniciais():
     except Exception as e:
         print(f"⚠️ Erro ao carregar DOCX: {e}. Usando verbos padrão.")
         return obter_verbos_padrao()
+
+
+def pos_processar_validacao_verbos(df_final, verbos_singular, verbos_plural):
+    """
+    Pós-processamento: Valida e corrige inconsistências entre QtdNoticias e verbos usados.
+    
+    Esta função:
+    1. Reconta IDs reais no campo 'Ids'
+    2. Detecta o verbo usado no resumo
+    3. Corrige automaticamente se houver inconsistência
+    
+    Args:
+        df_final: DataFrame com os resumos gerados
+        verbos_singular: lista de verbos no singular
+        verbos_plural: lista de verbos no plural
+    
+    Returns:
+        DataFrame corrigido
+    """
+    print("\n🔍 === PÓS-PROCESSAMENTO: VALIDAÇÃO DE VERBOS ===")
+    
+    if df_final.empty:
+        print("⚠️ DataFrame vazio, nada a processar")
+        return df_final
+    
+    df = df_final.copy()
+    correcoes_realizadas = 0
+    
+    # Criar mapeamento de verbos para facilitar substituição (pareamento por índice)
+    mapa_singular_plural = {}
+    mapa_plural_singular = {}
+    
+    # Usar pareamento por índice (já que agora vem do Excel com correspondência garantida)
+    for i in range(min(len(verbos_singular), len(verbos_plural))):
+        sing = verbos_singular[i]
+        plur = verbos_plural[i]
+        mapa_singular_plural[sing] = plur
+        mapa_plural_singular[plur] = sing
+    
+    print(f"📋 Mapeamento criado: {len(mapa_singular_plural)} pares de verbos")
+    
+    for idx, row in df.iterrows():
+        ids_str = str(row.get('Ids', ''))
+        resumo = str(row.get('Resumo', ''))
+        qtd_declarada = row.get('QtdNoticias', 0)
+        
+        # 1. Contar IDs reais
+        ids_array = [id.strip() for id in ids_str.split(',') if id.strip()]
+        qtd_real = len(ids_array)
+        
+        # 2. Detectar verbo usado
+        verbo_usado = None
+        tipo_verbo_usado = None
+        
+        for verbo_sing in verbos_singular:
+            if resumo.startswith(verbo_sing + " "):
+                verbo_usado = verbo_sing
+                tipo_verbo_usado = 'singular'
+                break
+        
+        if not verbo_usado:
+            for verbo_plur in verbos_plural:
+                if resumo.startswith(verbo_plur + " "):
+                    verbo_usado = verbo_plur
+                    tipo_verbo_usado = 'plural'
+                    break
+        
+        if not verbo_usado:
+            print(f"⚠️ Linha {idx}: Verbo não detectado no resumo")
+            print(f"   Início do resumo: '{resumo[:50]}...'")
+            continue
+        
+        # 3. Verificar inconsistência
+        tipo_correto = 'singular' if qtd_real == 1 else 'plural'
+        
+        if tipo_verbo_usado != tipo_correto:
+            print(f"🔧 Linha {idx}: Corrigindo inconsistência")
+            print(f"   IDs: {ids_str[:50]}{'...' if len(ids_str) > 50 else ''}")
+            print(f"   QtdReal: {qtd_real} | QtdDeclarada: {qtd_declarada}")
+            print(f"   Verbo usado: '{verbo_usado}' ({tipo_verbo_usado})")
+            print(f"   Deveria ser: {tipo_correto}")
+            
+            # 4. Substituir verbo usando o mapeamento do Excel
+            if tipo_correto == 'singular' and verbo_usado in mapa_plural_singular:
+                verbo_correto = mapa_plural_singular[verbo_usado]
+                resumo_corrigido = resumo.replace(verbo_usado + " ", verbo_correto + " ", 1)
+                df.at[idx, 'Resumo'] = resumo_corrigido
+                print(f"   ✅ Substituído: '{verbo_usado}' → '{verbo_correto}'")
+                correcoes_realizadas += 1
+                
+            elif tipo_correto == 'plural' and verbo_usado in mapa_singular_plural:
+                verbo_correto = mapa_singular_plural[verbo_usado]
+                resumo_corrigido = resumo.replace(verbo_usado + " ", verbo_correto + " ", 1)
+                df.at[idx, 'Resumo'] = resumo_corrigido
+                print(f"   ✅ Substituído: '{verbo_usado}' → '{verbo_correto}'")
+                correcoes_realizadas += 1
+            else:
+                print(f"   ⚠️ Verbo '{verbo_usado}' não encontrado no mapeamento para substituição")
+            
+            # 5. Atualizar QtdNoticias se estiver incorreto
+            if qtd_declarada != qtd_real:
+                df.at[idx, 'QtdNoticias'] = qtd_real
+                print(f"   ✅ QtdNoticias atualizado: {qtd_declarada} → {qtd_real}")
+    
+    print(f"\n✅ Pós-processamento concluído: {correcoes_realizadas} correção(ões) realizada(s)")
+    print("=" * 60)
+    
+    return df
 
 
 def obter_verbos_padrao():
@@ -116,15 +225,17 @@ def obter_verbos_padrao():
     return verbos_singular, verbos_plural
 
 
-def adicionar_prefixo_resumo(resumo, qtd_noticias, verbos_singular, verbos_plural):
+def adicionar_prefixo_resumo(resumo, qtd_noticias, verbos_singular, verbos_plural, pool_verbos):
     """
     Adiciona prefixo ao resumo baseado na quantidade de notícias.
+    Usa distribuição balanceada de verbos (Opção A).
     
     Args:
         resumo: texto do resumo
         qtd_noticias: quantidade de notícias agrupadas
         verbos_singular: lista de expressões no singular
         verbos_plural: lista de expressões no plural
+        pool_verbos: dicionário com pools embaralhados {'singular': [...], 'plural': [...]}
     
     Returns:
         resumo com prefixo adequado
@@ -132,14 +243,30 @@ def adicionar_prefixo_resumo(resumo, qtd_noticias, verbos_singular, verbos_plura
     if not resumo or resumo.strip() == "":
         return resumo
     
-    # Escolher verbo apropriado
+    # Escolher lista apropriada (singular ou plural) BASEADO APENAS EM qtd_noticias
     if qtd_noticias == 1:
-        verbo = random.choice(verbos_singular)
+        lista_tipo = 'singular'
+        lista_verbos_original = verbos_singular
     else:
-        verbo = random.choice(verbos_plural)
+        lista_tipo = 'plural'
+        lista_verbos_original = verbos_plural
     
-    # Garantir que o resumo começa com minúscula
-    resumo_ajustado = resumo[0].lower() + resumo[1:] if len(resumo) > 1 else resumo.lower()
+    # Debug adicional
+    print(f"    🔹 adicionar_prefixo_resumo chamado: qtd={qtd_noticias}, tipo='{lista_tipo}'")
+    
+    # Se o pool estiver vazio, reabastece com lista embaralhada
+    if not pool_verbos[lista_tipo]:
+        pool_verbos[lista_tipo] = lista_verbos_original.copy()
+        random.shuffle(pool_verbos[lista_tipo])
+        print(f"    🔄 Pool '{lista_tipo}' reabastecido: {len(pool_verbos[lista_tipo])} verbos")
+    
+    # Pega o próximo verbo do pool (sem repetição até esgotar)
+    verbo = pool_verbos[lista_tipo].pop(0)
+    print(f"    ✓ Verbo selecionado: '{verbo}' (pool restante: {len(pool_verbos[lista_tipo])})")
+    
+    # Garantir que o resumo está limpo (sem \n no início/fim) e começa com minúscula
+    resumo_limpo = resumo.strip()
+    resumo_ajustado = resumo_limpo[0].lower() + resumo_limpo[1:] if len(resumo_limpo) > 1 else resumo_limpo.lower()
     
     # Montar o resumo final (todos os verbos agora terminam com "que")
     resumo_final = f"{verbo} {resumo_ajustado}"
@@ -158,6 +285,25 @@ def agrupar_noticias_por_similaridade(arq_textos):
 
     # Carregar verbos uma única vez
     verbos_singular, verbos_plural = carregar_verbos_iniciais()
+    
+    # DEBUG CRÍTICO: Verificar se os verbos foram classificados corretamente
+    print("\n🔍 === VERIFICAÇÃO DE VERBOS CARREGADOS ===")
+    print(f"Verbos SINGULAR ({len(verbos_singular)}):")
+    for v in verbos_singular:
+        print(f"  - {v}")
+    print(f"\nVerbos PLURAL ({len(verbos_plural)}):")
+    for v in verbos_plural:
+        print(f"  - {v}")
+    print("=" * 60)
+    
+    # Criar pools de verbos embaralhados (Opção A - distribuição balanceada)
+    pool_verbos = {
+        'singular': verbos_singular.copy(),
+        'plural': verbos_plural.copy()
+    }
+    random.shuffle(pool_verbos['singular'])
+    random.shuffle(pool_verbos['plural'])
+    print(f"🎲 Pools de verbos inicializados e embaralhados\n")
 
     # ================= NORMALIZAÇÃO CRÍTICA =================
     def _normalize_df(df_in):
@@ -190,13 +336,65 @@ def agrupar_noticias_por_similaridade(arq_textos):
         return df
 
     def gerar_resumo_60(texto, id_):
+        def limpar_frases_introdutorias(texto_resumo):
+            """Remove frases introdutórias comuns que o LLM pode adicionar"""
+            if not texto_resumo:
+                return texto_resumo
+            
+            # Padrões de frases introdutórias a remover (case-insensitive)
+            padroes_remover = [
+                r'^aqui está um resumo.*?:\s*',
+                r'^aqui está o resumo.*?:\s*',
+                r'^segue um resumo.*?:\s*',
+                r'^baseado no texto fornecido,?\s*o resumo.*?:\s*',
+                r'^baseado no texto fornecido,?\s*',
+                r'^o resumo para a marca.*?:\s*',
+                r'^o resumo é:?\s*',
+                r'^resumo:?\s*',
+                r'^segue:?\s*',
+            ]
+            
+            texto_limpo = texto_resumo.strip()
+            for padrao in padroes_remover:
+                texto_limpo = re.sub(padrao, '', texto_limpo, flags=re.IGNORECASE)
+            
+            return texto_limpo.strip()
+        
         for tentativa in range(3):
             try:
                 print(f"📝 Gerando resumo curto para notícia ID: {id_}...")
-                prompt = "Resuma o conteúdo a seguir em até 60 palavras.\n\n" + texto
+                prompt = """INSTRUÇÕES IMPORTANTES:
+
+    1. Forneça APENAS o resumo da notícia, sem frases introdutórias como "aqui está um resumo", "baseado no texto fornecido", etc.
+
+    2. NEUTRALIDADE OBRIGATÓRIA:
+    - Relate apenas FATOS objetivos e verificáveis
+    - NÃO use adjetivos elogiosos ou bajuladores (inovador, revolucionário, líder, excelente, incrível, extraordinário, etc.)
+    - NÃO faça juízos de valor sobre a marca ou seus produtos
+    - NÃO reproduza linguagem de marketing ou promocional presente no texto original
+    - Mantenha tom jornalístico neutro e factual
+
+    3. FOCO:
+    - O que aconteceu (fatos)
+    - Quando aconteceu
+    - Quem estava envolvido
+    - Dados e números concretos
+
+    Resuma o conteúdo a seguir em até 60 palavras:
+
+    """ + texto
                 data = {
                     "model": "deepseek-chat",
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é relatar fatos objetivamente, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra e direta."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
                     "temperature": 0,
                     "max_tokens": 120
                 }
@@ -204,7 +402,8 @@ def agrupar_noticias_por_similaridade(arq_textos):
                 r.raise_for_status()
                 out = r.json()["choices"][0]["message"]["content"].strip()
                 if out:
-                    return out
+                    # Aplicar limpeza de frases introdutórias antes de retornar
+                    return limpar_frases_introdutorias(out)
             except Exception as e:
                 print(f"Resumo60 falhou (tentativa {tentativa+1}) ID {id_}: {e}")
                 time.sleep(1 + tentativa)
@@ -212,7 +411,154 @@ def agrupar_noticias_por_similaridade(arq_textos):
         titulo_e_conteudo = texto[:2000]
         return titulo_e_conteudo[:260]
 
+
     def agrupar_por_similaridade(resumos):
+        """
+        Agrupa resumos semanticamente relacionados - VERSÃO v2.1
+        """
+        import json
+        import re
+        
+        N = len(resumos)
+        
+        prompt = f"""Você é um especialista em análise de notícias corporativas.
+
+    TAREFA: Agrupe {N} resumos de notícias por SIMILARIDADE TEMÁTICA RELEVANTE.
+
+    🚨 **PRIORIDADE MÁXIMA - EVENTOS IDÊNTICOS** (analise PRIMEIRO):
+    1. Se MÚLTIPLAS notícias reportam o MESMO EVENTO FACTUAL (ex: "anúncio X em data Y", "análise Z publicada em data Y"), elas DEVEM ser agrupadas SEMPRE
+    2. Variações de redação NÃO justificam separação se o evento central é o mesmo
+    3. Diferentes ângulos jornalísticos do MESMO evento pertencem ao MESMO GRUPO
+    4. **[IMPORTANTE] DATAS PRÓXIMAS NO MESMO MÊS**: Se notícias sobre a MESMA transação empresarial (mesmas empresas + mesmo tipo de operação) têm datas no mesmo período (ex: "25 de junho" vs "25 de novembro"), mas TODOS os outros detalhes são consistentes, considere que pode ser variação na data de divulgação ou erro de transcrição → AGRUPAR
+    5. Exemplos práticos:
+       - ✅ AGRUPAR: "JBS anuncia fusão em 25/11" + "JBS e Viva criam joint venture" + "Gigante do couro nasce de fusão JBS-Viva" → MESMO evento, datas próximas
+       - ✅ AGRUPAR: "JBS cria JBS Viva 25/jun, 50% cada, 31 fábricas" + "JBS Viva anunciada 25/nov, 50% cada, 31 fábricas" → MESMO evento (detalhes idênticos, data pode variar)
+       - ✅ AGRUPAR: "Itaú BBA eleva preço-alvo JBS para US$ 20" + "JBS deve subir 37% diz BBA" → MESMA análise financeira
+
+    CRITÉRIOS SECUNDÁRIOS (aplicar APÓS verificar eventos idênticos):
+
+    🎯 **REGRA GERAL**: 
+    Agrupe quando as notícias compartilham o MESMO CONTEXTO OPERACIONAL ou EVENTO CORRELATO.
+    Separe quando tratam de CONTEXTOS TEMPORAIS ou TEMÁTICOS DISTINTOS.
+
+    ✅ **AGRUPAR QUANDO** (em ordem de prioridade):
+    1. **MESMO EVENTO FACTUAL**: Múltiplas reportagens do mesmo acontecimento (mesmo se redação diferente)
+    2. **Mesmo evento econômico + desdobramentos**: IPCA + Selic + projeções institucionais
+    3. **Programa/política + implementação**: Decreto PAT + regras específicas + prazos
+    4. **Transação específica + detalhes**: Aquisição + valores + empresas envolvidas
+    5. **Sequência temporal direta**: Anúncio + resultados + desdobramentos imediatos
+    6. **Diferentes aspectos do mesmo fato**: Medida governamental + impactos setoriais
+
+    ❌ **SEPARAR QUANDO**:
+    1. **Temporalidades desconectadas**: Evento histórico + fato recente sem relação direta
+    2. **Áreas de negócio não relacionadas**: Operações comerciais + questões jurídicas independentes
+    3. **Menção superficial mesma empresa**: Apenas citar mesma empresa em contextos distintos
+    4. **Eventos independentes**: Investigação antitruste + programa governamental antigo
+
+    TESTES DE DECISÃO PRÁTICOS:
+
+    TESTE 1 - IDENTIDADE DE EVENTO (usar PRIMEIRO):
+    "As notícias reportam o MESMO acontecimento factual (data, empresa, ação específica)?"
+    - SIM → AGRUPAR OBRIGATORIAMENTE (ex: múltiplas reportagens de "fusão JBS-Viva 25/11")
+    - NÃO → Aplicar TESTE 2
+
+    TESTE 2 - COERÊNCIA TEMÁTICA (usar se TESTE 1 = NÃO):
+    "Se remover a menção à empresa principal, as notícias ainda fazem sentido juntas?"
+    - SIM → AGRUPAR (ex: políticas econômicas, programas governamentais)
+    - NÃO → SEPARAR (ex: eventos históricos vs fatos recentes não relacionados)
+
+    EXEMPLOS CONCRETOS:
+
+    PRIORIDADE 1 - MESMO EVENTO (AGRUPAR SEMPRE):
+    - ✅ MESMO GRUPO: "JBS anuncia fusão" + "JBS e Viva criam JBS Viva" + "Gigante do couro nasce" → mesmo evento (fusão 25/11)
+    - ✅ MESMO GRUPO: "BBA eleva alvo JBS US$ 20" + "JBS deve subir 37%" → mesma análise financeira
+    - ✅ MESMO GRUPO: "Avião J&F em Caracas domingo" + "Jato JBS pousa na Venezuela" → mesmo voo
+
+    PRIORIDADE 2 - CONTEXTO CORRELATO:
+    - ✅ MESMO GRUPO: "IPCA 0,09%" + "Selic 15%" + "PicPay revisa projeção" → contexto econômico correlato
+    - ✅ MESMO GRUPO: "Decreto PAT" + "Taxas 3,6%" + "Interoperabilidade" → mesma política em implementação
+
+    SEPARAR:
+    - ❌ SEPARAR: "Estratégia campeãs nacionais 2010" + "Investigação EUA 2025" → temporalidades desconectadas
+    - ❌ SEPARAR: "JBS compra empresa X" + "JBS em operação Carne Fraca 2017" → eventos independentes
+
+    BALANCEAMENTO:
+    - Evite agrupamento excessivo (não agrupe temas distintos)
+    - Evite fragmentação excessiva (agrupe contextos correlatos)
+    - Foque em IDENTIDADE DE EVENTO primeiro, COERÊNCIA TEMÁTICA depois
+
+    FORMATO DE SAÍDA (OBRIGATÓRIO):
+    {{"groups":[g1,g2,...,g{N}]}}
+
+    Onde cada g é um número inteiro ≥1. Resumos no mesmo grupo devem ter o mesmo número.
+
+    RESUMOS A AGRUPAR:
+    """
+        
+        for i, resumo in enumerate(resumos, 1):
+            prompt += f"\n{i}. {resumo}"
+        
+        data = {
+            "model": "deepseek-chat",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+            "max_tokens": 500
+        }
+        
+        try:
+            resp = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data, timeout=60)
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"].strip()
+            
+            m = re.search(r'\{.*\}', content, flags=re.DOTALL)
+            if m:
+                try:
+                    obj = json.loads(m.group(0))
+                    grupos = obj.get("groups", [])
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ Erro ao parsear JSON: {e}")
+                    grupos = []
+            else:
+                grupos = []
+            
+            if not grupos or len(grupos) != N:
+                print(f"⚠️ Resposta inválida da API. Extraindo números como fallback...")
+                nums = list(map(int, re.findall(r'\d+', content)))
+                grupos = nums[:N] if len(nums) >= N else []
+            
+            if not grupos or len(grupos) != N:
+                print(f"⚠️ Usando agrupamento sequencial (fallback total)")
+                grupos = list(range(1, N + 1))
+            
+            if len(grupos) < N:
+                grupos += [grupos[-1]] * (N - len(grupos))
+            elif len(grupos) > N:
+                grupos = grupos[:N]
+            
+            grupos_limpos = []
+            for grupo in grupos:
+                if isinstance(grupo, list):
+                    grupos_limpos.append(grupo[0] if grupo else 1)
+                elif isinstance(grupo, (int, float)):
+                    grupos_limpos.append(int(grupo))
+                else:
+                    try:
+                        grupos_limpos.append(int(str(grupo)))
+                    except (ValueError, TypeError):
+                        grupos_limpos.append(1)
+            
+            grupos_distintos = len(set(grupos_limpos))
+            print(f"✅ Agrupamento concluído: {grupos_distintos} grupos distintos de {N} resumos")
+            
+            return grupos_limpos
+            
+        except Exception as e:
+            print(f"❌ Erro ao agrupar resumos: {e}")
+            import traceback
+            traceback.print_exc()
+            return list(range(1, N + 1))
+
+    def agrupar_por_similaridade_original(resumos):
         import json, re
         N = len(resumos)
         prompt = (
@@ -269,11 +615,71 @@ def agrupar_noticias_por_similaridade(arq_textos):
             return list(range(1, N+1))
 
     def gerar_resumo_120(textos, marca):
+        def limpar_frases_introdutorias(texto_resumo):
+            """Remove frases introdutórias comuns que o LLM pode adicionar"""
+            if not texto_resumo:
+                return texto_resumo
+            
+            # Padrões de frases introdutórias a remover (case-insensitive)
+            padroes_remover = [
+                r'^aqui está um resumo.*?:\s*',
+                r'^aqui está o resumo.*?:\s*',
+                r'^segue um resumo.*?:\s*',
+                r'^baseado no texto fornecido,?\s*o resumo.*?:\s*',
+                r'^baseado no texto fornecido,?\s*',
+                r'^o resumo para a marca.*?:\s*',
+                r'^o resumo é:?\s*',
+                r'^resumo:?\s*',
+                r'^segue:?\s*',
+            ]
+            
+            texto_limpo = texto_resumo.strip()
+            for padrao in padroes_remover:
+                texto_limpo = re.sub(padrao, '', texto_limpo, flags=re.IGNORECASE)
+            
+            return texto_limpo.strip()
+        
         corpo = "\n--- NOTÍCIA ---\n".join(textos)
-        prompt = f"Gere um resumo único de até 120 palavras para as notícias a seguir sobre a marca '{marca}', destacando os fatos mais importantes:\n\n{corpo}"
+        prompt = f"""INSTRUÇÕES IMPORTANTES:
+
+1. Forneça APENAS o resumo consolidado, sem frases introdutórias.
+
+2. NEUTRALIDADE OBRIGATÓRIA:
+   - Relate apenas FATOS objetivos e verificáveis sobre a marca '{marca}'
+   - NÃO use adjetivos elogiosos ou bajuladores (inovador, revolucionário, líder de mercado, excelente, incrível, extraordinário, disruptivo, etc.)
+   - NÃO faça juízos de valor sobre a marca, seus produtos ou serviços
+   - NÃO reproduza linguagem de marketing ou promocional das notícias originais
+   - Mantenha tom jornalístico estritamente neutro e factual
+   - Se a notícia contém críticas ou problemas, relate-os objetivamente sem suavizar
+
+3. FOCO EM FATOS:
+   - O que aconteceu (ações concretas)
+   - Quando aconteceu (datas, períodos)
+   - Dados numéricos e estatísticos
+   - Anúncios, lançamentos, eventos específicos
+   - Resultados financeiros ou operacionais mensuráveis
+
+4. EVITE:
+   - Opiniões sobre qualidade ou valor
+   - Superlativos e exageros
+   - Promessas ou expectativas futuras não confirmadas
+   - Linguagem que soe como propaganda
+
+Gere um resumo único de até 120 palavras consolidando as notícias a seguir sobre a marca '{marca}':
+
+{corpo}"""
         data = {
             "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é consolidar informações de múltiplas notícias relatando apenas fatos objetivos, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra, direta e imparcial. Trate a marca como qualquer outra entidade noticiada, sem favorecimento."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
             "temperature": 0,
             "max_tokens": 400
         }
@@ -296,7 +702,9 @@ def agrupar_noticias_por_similaridade(arq_textos):
             texto = _re.sub(r"^\*\*[^*]*\*\*\s*", "", texto, flags=_re.IGNORECASE | _re.MULTILINE)
             texto = _re.sub(r"\*\(Exatamente\s*120\s*palavras\)\*|\*\(120\s*palavras\)\*", "", texto, flags=_re.IGNORECASE)
             texto = _re.sub(r"(\n\s*)+", "\n", texto.strip())
-            return texto.strip()
+            
+            # Aplicar limpeza de frases introdutórias antes de retornar
+            return limpar_frases_introdutorias(texto.strip())
         except Exception as e:
             print(f"Erro ao gerar resumo final: {e}")
             return ""
@@ -357,24 +765,58 @@ def agrupar_noticias_por_similaridade(arq_textos):
             for grupo_id, df_grupo in df_marca.groupby('GrupoID'):
                 textos = df_grupo['TextoCompleto'].tolist()
                 ids = df_grupo['Id'].astype(str).tolist()
-                qtd_noticias = len(ids)
+                
+                # ========== CORREÇÃO CRÍTICA: Garantir contagem consistente ==========
+                # Limpar IDs antes de contar
+                ids_limpos = [id_val.strip() for id_val in ids if id_val and str(id_val).strip()]
+                qtd_noticias = len(ids_limpos)
+                ids_para_salvar = ','.join(ids_limpos)  # Usar a mesma lista limpa
+                
+                # Debug: Verificar se a contagem está correta
+                print(f"  📊 Grupo {grupo_id}: {qtd_noticias} notícia(s)")
+                print(f"     IDs: {ids_para_salvar[:60]}{'...' if len(ids_para_salvar) > 60 else ''}")
+                # ====================================================================
                 
                 resumo_final = gerar_resumo_consolidado_por_chunks(textos, marca)
                 
-                # ========== NOVO: Adicionar prefixo com verbo ==========
+                # ========== Adicionar prefixo com verbo (usando pool balanceado) ==========
                 resumo_final = adicionar_prefixo_resumo(
                     resumo_final, 
                     qtd_noticias, 
                     verbos_singular, 
-                    verbos_plural
+                    verbos_plural,
+                    pool_verbos  # ← Passar o pool para distribuição balanceada
                 )
-                # ======================================================
+                
+                # Debug: Mostrar qual verbo foi usado E VALIDAR
+                primeiro_verbo = ' '.join(resumo_final.split()[0:3])
+                
+                # Detectar se o verbo usado é realmente singular ou plural
+                verbo_real_tipo = None
+                for v in verbos_singular:
+                    if resumo_final.startswith(v + " "):
+                        verbo_real_tipo = "SINGULAR"
+                        break
+                if not verbo_real_tipo:
+                    for v in verbos_plural:
+                        if resumo_final.startswith(v + " "):
+                            verbo_real_tipo = "PLURAL"
+                            break
+                
+                tipo_esperado = "SINGULAR" if qtd_noticias == 1 else "PLURAL"
+                
+                if verbo_real_tipo != tipo_esperado:
+                    print(f"  ❌ ERRO: Esperado {tipo_esperado} mas usou {verbo_real_tipo}!")
+                    print(f"     Verbo aplicado: '{primeiro_verbo}'")
+                else:
+                    print(f"  ✅ Verbo: '{primeiro_verbo}' ({tipo_esperado}) - CORRETO")
+                # ==========================================================================
                 
                 resultados.append({
                     "Marca": marca,
                     "GrupoID": f"{marca}_G{grupo_id}",
-                    "QtdNoticias": qtd_noticias,
-                    "Ids": ','.join(ids),
+                    "QtdNoticias": qtd_noticias,  # Usar a contagem limpa
+                    "Ids": ids_para_salvar,  # Usar a string limpa
                     "Resumo": resumo_final
                 })
 

@@ -16,12 +16,17 @@ pasta_output = "output"
 # Arquivo de Favoritos gerado pela API - ORIGINAL
 favoritos_marca = "Favoritos_Marcas.xlsx"
 arq_api_original = os.path.join(pasta_api, favoritos_marca)
+favoritos_marca_raw = "Favoritos_Marcas_raw.xlsx"
+arq_api_original_raw = os.path.join(pasta_api, favoritos_marca_raw)
 aux = "aux.xlsx"
 arq_aux = os.path.join(pasta_api, aux)
 
 favoritos_setor = "Favoritos_Setor.xlsx"
 arq_api_original_setor = os.path.join(pasta_api, favoritos_setor)
 
+# Arquivo de Favoritos gerado pela API - SETOR (RAW)
+favoritos_setor_raw = "Favoritos_Setor_raw.xlsx"
+arq_api_original_setor_raw = os.path.join(pasta_api, favoritos_setor_raw)
 favoritos_setor_inter = "Favoritos_Setor_inter.xlsx"
 arq_api_original_setor_inter = os.path.join(pasta_api, favoritos_setor_inter)
 
@@ -95,12 +100,12 @@ arq_resumo_final = os.path.join(pasta_output, resumo_final)
 
 # Marcas
 w_marcas = ['Holding', 'J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior Friboi', 'J&F Mineração/LHG', 'J&F Mineração/LHG Mining', \
-            'Banco Original', 'PicPay', 'Eldorado', 'Flora', 'Âmbar Energia', 'Ambar Energia', \
+            'Banco Original', 'PicPay', 'Eldorado', 'Flora', 'Âmbar Energia', 'Ambar Energia', 'Ambar', \
             'Canal Rural', 'Braskem', 'Instituto J&F' ]
 marcas_a_ignorar = ['J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior Friboi', 'J&F Mineração/LHG', 'J&F Mineração/LHG Mining', \
-                    'Banco Original', 'PicPay', 'Eldorado', 'Flora', 'Âmbar Energia', 'Ambar Energia', \
+                    'Banco Original', 'PicPay', 'Âmbar Energia', 'Ambar Energia', 'Ambar', \
                     'Canal Rural', 'Braskem', 'Instituto J&F' ]
-marcas_prioridade = ['J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior Friboi', 'PicPay', 'Banco Original', 'Eldorado', 'Flora', 'Âmbar Energia', 'Ambar Energia', \
+marcas_prioridade = ['J&F', 'JBS', 'Joesley Batista', 'Wesley Batista', 'Júnior Friboi', 'PicPay', 'Banco Original', 'Eldorado', 'Flora', 'Âmbar Energia', 'Ambar Energia', 'Ambar', \
                      'Canal Rural', 'Braskem', 'Instituto J&F']
 lista_setores = ["Setor de Papel e Celulose", "Setor de Mineração", "Setor de Agronegócios", "Setor de Educação", "Setor de Energia", "Setor de Óleo de Gás", "Justiça", \
                  "Meio Ambiente e ESG", "Política - Governo e Congresso Nacional"]

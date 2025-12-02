@@ -18,7 +18,7 @@ def limpar_setor(final_df_setor):
     # --- End of added code ---
 
     # Variável com os títulos a ignorar
-    titulos_a_ignorar = ["capa", "Alice Ferraz", "Curtas", "Editorial", "Expediente", "horóscopo", \
+    titulos_a_ignorar = ["Alice Ferraz", "Curtas", "Editorial", "Expediente", "horóscopo", \
                         "mensagens", "MIRIAM LEITÃO", "MÔNICA BERGAMO", "multitela", "Obituário", \
                         "Outro canal", "Painel", "Play", "sesc", "cartas de leitores", "coluna de broadcast", \
                         "coluna do estadão", "frase do dia"]
@@ -56,7 +56,7 @@ def limpar_setor(final_df_setor):
     # Assuming final_df_setor and w_marcas are already defined in your environment
 
     # 1. Eliminar registros com Secao indesejada (em minúsculas)
-    secoes_a_ignorar = ["esportes", "cotidiano", "folha corrida", "rio", "saúde", "opinião", "na web", \
+    secoes_a_ignorar = ["esportes", "folha corrida", "rio", "saúde", "opinião", "na web", \
                         "classificados", "cultura", "ilustrada"]
 
     # Create a list of the lowercased and stripped versions of the sections to ignore

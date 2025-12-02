@@ -1205,6 +1205,26 @@ def gerar_prompts_setor(df):
     # ---------- INÍCIO: PRE-PROCESSAMENTO (descartar notícias por veículo) ----------
     # Regras por IdVeiculo (comparação em lowercase). Se um registro corresponder a qualquer regra,
     # ele será removido do DataFrame antes do restante do processamento.
+    # Load the list of Valor columnists (used by IdVeiculo 10459 rule).
+    # Embedding the list of Valor columnists directly into the code (avoids runtime file I/O)
+    _COLUNISTAS_VALOR = {
+        'alex ribeiro', 'amir labaki', 'ana inoue', 'ana maria diniz', 'andrea jubé',
+        'armando castelar pinheiro', 'assis moreira', 'betania tanure', 'bruno carazza',
+        'catherine vieira', 'césar felício', 'claudia safatle', 'claudio garcia',
+        'daniela cachich', 'daniela chiaretti', 'edvaldo santana', 'fernando exman',
+        'fernando torres', 'gustavo loyola', 'humberto saccomandi', 'isabel clemente',
+        'isis borge', 'jairo saddi', 'joaquim levy', 'jorge arbache', 'jorge lucki',
+        'josé de souza martins', 'josé eli da veiga', 'josé júlio senna', 'luiz gonzaga belluzzo',
+        'luiz schymura', 'marcelo cardoso', 'marcelo d’agosto', 'márcio garcia',
+        'maria clara r. m. do prado', 'maria cristina fernandes', 'mariana clark',
+        'mario mesquita', 'marli olmos', 'michel laub', 'naercio menezes filho',
+        'nilson teixeira', 'pedro butcher', 'pedro cafardo', 'pedro cavalcanti e renato fragelli',
+        'rafael souto', 'renato bernhoeft', 'robinson borges', 'sergio chaia',
+        'sergio lamucci', 'stela campos', 'tatiana salem levy', 'tiago cavalcanti',
+        'vicky bloch', 'viviane martins'
+    }
+
+
     def _should_discard_row(row):
         try:
             idv = row.get('IdVeiculo', None)
@@ -1235,11 +1255,23 @@ def gerar_prompts_setor(df):
                     return True
             return False
 
+        # Build combined text for checks that should look everywhere in the article
+        texto_completo = (titulo + ' ' + conteudo).strip()
+
         # Vehicle-specific rules (all comparisons made in lowercase)
         if idv == 331:
             if any_line_eq('análise', 10):
                 return True
             if any_line_eq('opinião', 10):
+                return True
+            # New rules: exact single-word / single-line markers that should trigger discard
+            if any_line_eq('erramos', 10):
+                return True
+            if any_line_eq('painel do leitor', 10):
+                return True
+            if any_line_eq('mortes', 10):
+                return True
+            if any_line_eq('tendências/debates', 10) or any_line_eq('tendências / debates', 10):
                 return True
             if any_line_eq('réplica', 10):
                 return True
@@ -1256,12 +1288,30 @@ def gerar_prompts_setor(df):
             if titulo == 'expediente' or any_line_eq('expediente', 5):
                 return True
 
+            # Discard if any known Valor columnist name appears anywhere in the text
+            if _COLUNISTAS_VALOR:
+                # Check for any columnist name as a substring in the combined text
+                for nome in _COLUNISTAS_VALOR:
+                    if nome in texto_completo:
+                        return True
+
         if idv == 682:
             if titulo == 'expediente' or any_line_eq('expediente', 5):
                 return True
             if any_line_eq('análise', 15):
                 return True
             if any_line_eq('opinião', 15):
+                return True
+            # New rules
+            if any_line_eq('mensagens cartas@oglobo.com.br', 10):
+                return True
+            if any_line_eq('*artigo', 10):
+                return True
+            if any_line_eq('artigo', 10):
+                return True
+            if 'oglobo.globo.com/opinião' in texto_completo:
+                return True
+            if titulo == 'falecimentos':
                 return True
 
         if idv == 675:
@@ -1271,6 +1321,11 @@ def gerar_prompts_setor(df):
                 return True
             if titulo == 'expediente':
                 return True
+            # New rules for 675
+            if titulo == 'obituário' or titulo == 'falecimentos':
+                return True
+            if any_line_startswith('artigo', 10):
+                return True
 
         return False
 
@@ -1279,9 +1334,13 @@ def gerar_prompts_setor(df):
         if 'IdVeiculo' in df.columns and 'Conteudo' in df.columns:
             initial_count = len(df)
             mask_discard = df.apply(_should_discard_row, axis=1)
-            num_discarded = mask_discard.sum()
+            num_discarded = int(mask_discard.sum())
             if num_discarded > 0:
+                # Provide a total and breakdown by IdVeiculo for easier auditing
+                discarded_ids = df.loc[mask_discard, 'IdVeiculo']
+                breakdown = discarded_ids.value_counts().to_dict()
                 print(f"🧹 Pré-processamento: descartando {num_discarded} notícias por regras de veículo (de {initial_count})")
+                print(f"   ↳ Descartes por IdVeiculo: {breakdown}")
                 # Optionally save the discarded rows for audit/debug (commented)
                 # df[mask_discard].to_csv('dados/api/discarded_prompts_setor.csv', index=False)
             df = df[~mask_discard].copy()

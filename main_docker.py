@@ -25,7 +25,7 @@ from relevancia import avaliar_relevancia
 from resumos_marcas_v2 import agrupar_noticias_por_similaridade
 from prompts_setor import gerar_prompts_setor
 from resumos_setor import gerar_resumos_setor
-from relatorio_preliminar import gerar_versao_preliminar
+from relatorio_preliminar_segmentado import gerar_versao_preliminar
 from relatorio_ajustado_final import gerar_versao_ajustada
 from config import arq_api_original, arq_api, arq_api_irrelevantes, arq_results, arq_results_irrelevantes, arq_api_original_setor, arq_api_setor, arq_prompts_setor, \
     arq_results_setor, arq_api_original_editorial, arq_api_editorial, arq_api_original_SPECIALS, arq_api_SPECIALS, arq_resumo_final, arq_api_original_raw
@@ -135,10 +135,28 @@ def main():
     configs = carregar_configs(caminho_json)
     setor_df = consultar_apis(configs)
 
-    # Salvar arquivo raw de SETOR antes da limpeza
+    # Salvar arquivo raw de SETOR antes da limpeza (sanitizando caracteres inválidos)
     from config import arq_api_original_setor_raw
+    import re
+    def _sanitize_value_for_excel(x):
+        if pd.isna(x):
+            return x
+        try:
+            s = str(x)
+            return re.sub(r'[\uD800-\uDFFF]', '', s)
+        except Exception:
+            try:
+                return str(x).encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+            except Exception:
+                return str(x)
+
     try:
-        setor_df.to_excel(arq_api_original_setor_raw, index=False)
+        setor_df_safe = setor_df.copy()
+        for col in setor_df_safe.columns:
+            if setor_df_safe[col].dtype == object:
+                setor_df_safe[col] = setor_df_safe[col].apply(_sanitize_value_for_excel)
+
+        setor_df_safe.to_excel(arq_api_original_setor_raw, index=False)
         print(f"Saved raw setor API output: {arq_api_original_setor_raw} ({len(setor_df)} records)")
     except Exception as e:
         print(f"Warning: could not save raw setor file: {e}")

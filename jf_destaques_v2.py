@@ -1663,9 +1663,9 @@ paragraphs_to_remove_indices = []  # Lista de índices para remoção
 pattern_line_start_paren_end_palavras = r"^\s*\*\s*\(.*?palavras\)\s*$"
 # Pattern for lines starting with "*Resumo"
 pattern_line_start_resumo = r"^\s*\*Resumo.*$"
-# Pattern for any occurrence of "(*...palavras*)" or "(...palavras)" or "**Resumo (...):**" etc.
-# Let's refine this to catch various formats
-pattern_parenthesized_palavras_general = r"\s*[\*\s]*\(.*?\s*palavras\s*\)[\s\:\*]*"
+# Pattern for any occurrence of "(90 palavras)" or "(160 palavras)" etc.
+# More specific: only matches patterns like "(NN palavras)" to avoid removing dates like "de 2026"
+pattern_parenthesized_palavras_general = r"\s*\(\s*\d+\s*palavras\s*\)[\s\:\*]*"
 # Add patterns for specific prefixes like "**Resumo:**" or "*Resumo:*"
 pattern_specific_resumo_prefixes = r"^\s*[\*\s]*Resumo\s*[:\*\s]*"
 

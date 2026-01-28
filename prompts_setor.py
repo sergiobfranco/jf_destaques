@@ -1351,9 +1351,11 @@ def gerar_prompts_setor(df):
 
     # Definir os IDs dos veículos prioritários
     veiculos_prioritarios = [10459, 675]
-    pontuacao_extra_veiculo = 100 # Pontuação extra para notícias desses veículos (ajuste este valor se necessário)
+    pontuacao_extra_veiculo = 10 # Pontuação extra para notícias desses veículos (ajuste este valor se necessário)
+    # Bônus quando o campo 'Paginas' contiver o marcador '_01_001'
+    pontuacao_extra_pagina = 10  # Ajuste este valor conforme necessário
 
-    def calculate_relevance_score(text, id_veiculo, temas_termos, veiculos_prioritarios, pontuacao_extra_veiculo):
+    def calculate_relevance_score(text, id_veiculo, temas_termos, veiculos_prioritarios, pontuacao_extra_veiculo, paginas_value=None, pontuacao_extra_pagina=0):
         """
         Calcula uma pontuação de relevância para a notícia.
         A pontuação é baseada na frequência dos termos chave dos temas, no tamanho do texto
@@ -1380,8 +1382,32 @@ def gerar_prompts_setor(df):
         if theme_counts_filtered:
             preponderant_theme = max(theme_counts_filtered, key=theme_counts_filtered.get)
 
-        # Calcular a pontuação total de relevância
-        relevance_score = total_term_count  # ← Usando o total_term_count
+        # Calcular a pontuação total de relevância (contagem de termos)
+        relevance_score = total_term_count
+
+        # Aplicar bônus por veículo prioritário (se aplicável)
+        try:
+            # id_veiculo pode ser int ou string; tente converter para int quando possível
+            if id_veiculo is not None:
+                try:
+                    vid = int(id_veiculo)
+                except Exception:
+                    vid = id_veiculo
+
+                if vid in veiculos_prioritarios:
+                    relevance_score += pontuacao_extra_veiculo
+        except Exception:
+            # Falha silenciosa: não adicionar o bônus se houver problemas inesperados
+            pass
+
+        # Aplicar bônus se o campo 'Paginas' contiver o marcador específico
+        try:
+            if paginas_value is not None:
+                paginas_str = str(paginas_value)
+                if '_01_001' in paginas_str:
+                    relevance_score += pontuacao_extra_pagina
+        except Exception:
+            pass
 
         return relevance_score, preponderant_theme
 

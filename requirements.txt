@@ -51,9 +51,8 @@ scikit-learn==1.6.1
 scipy==1.15.2
 setuptools==78.1.0
 six==1.17.0
-# sentence-transformers moved to optional requirements-ml.txt
-setuptools==78.1.0
-six==1.17.0
+# sentence-transformers moved to optional requirements-ml.txt (see `requirements-ml.txt`)
+# ML / embedding deps are optional and kept in `requirements-ml.txt` (CPU-only by default)
 sniffio==1.3.1
 streamlit==1.39.0
 sympy==1.13.1

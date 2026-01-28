@@ -16,8 +16,6 @@ import pandas as pd
 import json
 import requests
 import time
-import fcntl
-import datetime
 from cronometro import obter_timestamp_brasilia, calcular_tempo_decorrido
 from temporizador import aguardar_data_futura
 from limpeza_marcas import limpar_marcas
@@ -37,48 +35,6 @@ from config import arq_api_original_raw
 # Variável global para armazenar a opção selecionada
 opcao_selecionada = None
 
-LOCK_FILE = '/tmp/jf_relatorio.lock'
-
-def adquirir_lock():
-    try:
-        lock_file = open(LOCK_FILE, 'w')
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        lock_file.write(f"PID: {os.getpid()}\n")
-        lock_file.write(f"Timestamp: {datetime.datetime.now().isoformat()}\n")
-        lock_file.flush()
-        return lock_file
-    except IOError:
-        return None
-
-def liberar_lock(lock_file):
-    if lock_file:
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-            lock_file.close()
-        except:
-            pass
-        try:
-            if os.path.exists(LOCK_FILE):
-                os.remove(LOCK_FILE)
-        except:
-            pass
-
-def verificar_lock_ativo():
-    if not os.path.exists(LOCK_FILE):
-        return False
-    try:
-        test_lock = open(LOCK_FILE, 'r')
-        fcntl.flock(test_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        fcntl.flock(test_lock.fileno(), fcntl.LOCK_UN)
-        test_lock.close()
-        os.remove(LOCK_FILE)
-        return False
-    except IOError:
-        return True
-    except:
-        return False
-
-
 def configurar_interface():
     """Configura a interface Streamlit"""
     st.set_page_config(
@@ -94,11 +50,6 @@ def configurar_interface():
 def selecionar_opcao():
     """Interface para seleção do tipo de relatório"""
     global opcao_selecionada
-    
-    if st.session_state.get('processamento_em_andamento', False) or verificar_lock_ativo():
-        st.error("⚠️ PROCESSAMENTO JÁ EM ANDAMENTO!")
-        return False
-    
     
     st.subheader("Selecione o tipo de relatório a ser gerado:")
     
@@ -152,8 +103,7 @@ def selecionar_opcao():
         opcao_selecionada = st.session_state.opcao_selecionada
         st.success(f"✅ Opção selecionada: **{opcoes[opcao_selecionada]}**")
         
-        if st.button("🚀 Iniciar Processamento", type="primary", use_container_width=True, disabled=st.session_state.get('processamento_em_andamento', False)):
-            st.session_state.processamento_em_andamento = True
+        if st.button("🚀 Iniciar Processamento", type="primary", use_container_width=True):
             return True
     
     return False
@@ -272,13 +222,6 @@ def consultar_apis(configs, max_tentativas=3, timeout_base=30):
 
 def processar_relatorio():
     """Função principal de processamento baseada na opção selecionada"""
-    lock = None
-    lock = adquirir_lock()
-    if lock is None:
-        st.error("⚠️ Outro processamento em andamento!")
-        st.session_state.processamento_em_andamento = False
-        return
-    
     global opcao_selecionada
     
     if 'opcao_selecionada' not in st.session_state:
@@ -689,14 +632,9 @@ def processar_relatorio():
         
         st.info(info_opcao)
         
-        st.session_state.processamento_em_andamento = False
-
     except Exception as e:
         st.error(f"❌ Erro durante o processamento: {str(e)}")
         st.exception(e)
-
-    finally:
-        liberar_lock(lock)
 
 def main():
     """Função principal com interface Streamlit"""

@@ -360,6 +360,129 @@ def agrupar_noticias_por_similaridade(arq_textos):
             
             return texto_limpo.strip()
         
+        # ═══════════════════════════════════════════════════════════════
+        # FUNÇÃO: Corrigir datas inventadas (pós-processamento)
+        # ═══════════════════════════════════════════════════════════════
+        def corrigir_datas_inventadas(texto_resumo, texto_original):
+            """
+            O DeepSeek às vezes ignora a instrução e expande "sexta-feira (23)" 
+            para "sexta-feira, 23 de agosto" ou até remove a menção ao dia da semana
+            deixando apenas "em 23 de agosto".
+            
+            Esta função:
+            1. Procura no texto ORIGINAL por padrões "dia_da_semana (DD)"
+            2. Usa essa informação para corrigir o resumo
+            3. Converte datas inventadas de volta para o formato correto
+            
+            Padrões convertidos:
+            - "sexta-feira, 23 de agosto" → "nesta sexta-feira (23)"
+            - "em 23 de agosto" + original tem "sexta-feira (23)" → "nesta sexta-feira (23)"
+            """
+            if not texto_resumo:
+                return texto_resumo
+            
+            dias_semana = [
+                'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo',
+                'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado-feira', 'domingo-feira'
+            ]
+            meses = [
+                'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+                'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
+            ]
+            
+            # ════════════════════════════════════════════════════════════
+            # ESTRATÉGIA 1: Procurar no texto original por "dia_da_semana (DD)"
+            # ════════════════════════════════════════════════════════════
+            # Padrão: "(nesta|desta|na) sexta-feira (23)"
+            pattern_original = r'\b(?:nesta|desta|na|no)\s+(' + '|'.join(dias_semana) + r')\s*(?:-feira)?\s*\((\d{1,2})\)'
+            match_original = re.search(pattern_original, texto_original, re.IGNORECASE)
+            
+            # DEBUG: Printar se encontrou ou não
+            print(f"🔍 DEBUG corrigir_datas: pattern_original encontrado? {match_original is not None}")
+            if match_original:
+                print(f"   → Match: '{match_original.group(0)}'")
+                print(f"   → Grupo 1 (dia): '{match_original.group(1)}'")
+                print(f"   → Grupo 2 (num): '{match_original.group(2)}'")
+            else:
+                print(f"   → Nenhum match encontrado no texto original")
+                print(f"   → Primeiros 200 chars do original: {texto_original[:200]}")
+            
+            if match_original:
+                dia_semana_original = match_original.group(1)
+                numero_original = match_original.group(2)
+                
+                # Garantir que tem "-feira" se não tiver
+                if 'segunda' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
+                    dia_semana_original = 'segunda-feira'
+                elif 'terça' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
+                    dia_semana_original = 'terça-feira'
+                elif 'quarta' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
+                    dia_semana_original = 'quarta-feira'
+                elif 'quinta' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
+                    dia_semana_original = 'quinta-feira'
+                elif 'sexta' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
+                    dia_semana_original = 'sexta-feira'
+                
+                print(f"   → Dia normalizado: '{dia_semana_original}', número: {numero_original}")
+                
+                # Procurar por qualquer padrão de data no resumo que mencione esse número
+                # e substituir por "nesta [dia] ([número])"
+                
+                # Padrão 1: "dia_da_semana, DD de [mês]"
+                pattern1 = r'\b(' + '|'.join(dias_semana) + r')\s*(?:-feira)?\s*,?\s*' + numero_original + r'\s+de\s+(?:' + '|'.join(meses) + r')\b'
+                match1 = re.search(pattern1, texto_resumo, re.IGNORECASE)
+                if match1:
+                    print(f"   ✓ Pattern 1 encontrado: '{match1.group(0)}'")
+                    texto_resumo = re.sub(pattern1, f'nesta {dia_semana_original} ({numero_original})', texto_resumo, flags=re.IGNORECASE)
+                else:
+                    print(f"   ✗ Pattern 1 NÃO encontrado")
+                
+                # Padrão 2: "em DD de [mês]" (sem menção a dia da semana)
+                # IMPORTANTE: Não faz return aqui, deixa o fluxo continuar para pattern 2
+                pattern2 = r'\bem\s+' + numero_original + r'\s+de\s+(?:' + '|'.join(meses) + r')\b'
+                match2 = re.search(pattern2, texto_resumo, re.IGNORECASE)
+                if match2:
+                    print(f"   ✓ Pattern 2 encontrado: '{match2.group(0)}'")
+                    texto_resumo = re.sub(pattern2, f'nesta {dia_semana_original} ({numero_original})', texto_resumo, flags=re.IGNORECASE)
+                else:
+                    print(f"   ✗ Pattern 2 NÃO encontrado")
+                
+                print(f"   → Resumo após correção: '{texto_resumo[:100]}...'")
+                # Se encontrou alguma coisa na Estratégia 1, retorna já corrigido
+                return texto_resumo
+            
+            # ════════════════════════════════════════════════════════════
+            # ESTRATÉGIA 2: Padrão fallback (se não conseguir info do original)
+            # ════════════════════════════════════════════════════════════
+            # Padrão: "dia_da_semana, DD de [mês]" → "nesta dia_da_semana (DD)"
+            pattern = r'\b(' + '|'.join(dias_semana) + r')\s*(?:-feira)?\s*,?\s*(\d{1,2})\s+de\s+(?:' + '|'.join(meses) + r')\b'
+            
+            def replacer(match):
+                dia = match.group(1)
+                numero = match.group(2)
+                # Garantir que tem "-feira" se não tiver
+                if '-feira' not in dia:
+                    if 'segunda' in dia.lower():
+                        dia = 'segunda-feira'
+                    elif 'terça' in dia.lower():
+                        dia = 'terça-feira'
+                    elif 'quarta' in dia.lower():
+                        dia = 'quarta-feira'
+                    elif 'quinta' in dia.lower():
+                        dia = 'quinta-feira'
+                    elif 'sexta' in dia.lower():
+                        dia = 'sexta-feira'
+                    elif 'sábado' in dia.lower():
+                        dia = 'sábado'
+                    elif 'domingo' in dia.lower():
+                        dia = 'domingo'
+                return f"nesta {dia} ({numero})"
+            
+            texto_corrigido = re.sub(pattern, replacer, texto_resumo, flags=re.IGNORECASE)
+            return texto_corrigido
+        
+        # ═══════════════════════════════════════════════════════════════
+        
         for tentativa in range(3):
             try:
                 print(f"📝 Gerando resumo curto para notícia ID: {id_}...")
@@ -374,7 +497,25 @@ def agrupar_noticias_por_similaridade(arq_textos):
     - NÃO reproduza linguagem de marketing ou promocional presente no texto original
     - Mantenha tom jornalístico neutro e factual
 
-    3. FOCO:
+    3. TRATAMENTO DE DATAS - EXTREMAMENTE IMPORTANTE:
+    ⚠️ REGRA CRÍTICA: Se o texto original menciona "nesta sexta-feira (23)" ou "na terça (12)", COPIE EXATAMENTE ASSIM NO RESUMO.
+    
+    ✅ EXEMPLOS CORRETOS (copie assim do texto original):
+    - Texto original: "oferece nesta sexta-feira (23)" → Resumo: "oferece nesta sexta-feira (23)"
+    - Texto original: "anunciou na terça-feira (15)" → Resumo: "anunciou na terça-feira (15)"
+    - Texto original: "em 22 de janeiro de 2026" → Resumo: "em 22 de janeiro de 2026"
+    
+    ❌ EXEMPLOS ERRADOS (NUNCA FAÇA ASSIM):
+    - ERRADO: Converter "nesta sexta-feira (23)" para "na sexta-feira, 23 de agosto"
+    - ERRADO: Converter "na terça (12)" para "em 12 de março"
+    - ERRADO: Inventar um mês quando o texto só menciona dia da semana
+    
+    INSTRUÇÃO FINAL SOBRE DATAS:
+    → PRESERVE EXATAMENTE o formato de data do texto original
+    → NÃO EXPANDA "dia da semana (X)" para "dia da semana, X de [mês inventado]"
+    → Se não tiver certeza, copie o texto original exatamente como está
+
+    4. FOCO:
     - O que aconteceu (fatos)
     - Quando aconteceu
     - Quem estava envolvido
@@ -402,8 +543,12 @@ def agrupar_noticias_por_similaridade(arq_textos):
                 r.raise_for_status()
                 out = r.json()["choices"][0]["message"]["content"].strip()
                 if out:
-                    # Aplicar limpeza de frases introdutórias antes de retornar
-                    return limpar_frases_introdutorias(out)
+                    # Aplicar limpeza de frases introdutórias
+                    out = limpar_frases_introdutorias(out)
+                    # Corrigir datas que o DeepSeek possa ter inventado/expandido
+                    # Passa o texto original para melhorar a correção
+                    out = corrigir_datas_inventadas(out, texto)
+                    return out
             except Exception as e:
                 print(f"Resumo60 falhou (tentativa {tentativa+1}) ID {id_}: {e}")
                 time.sleep(1 + tentativa)

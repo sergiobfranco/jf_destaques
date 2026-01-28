@@ -11,6 +11,7 @@ import time
 from config import arq_resumo_final, marca1, marca2
 import requests
 import os
+import traceback
 from datetime import datetime
 
 # 1. FUNÇÃO AUXILIAR PARA ENCURTAMENTO DE URL
@@ -446,54 +447,66 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
             
             document.add_paragraph("")
 
-            current_tema = None
+            # Agrupar por Tema para evitar blocos repetidos do mesmo Tema
+            # Limpar strings de Tema e garantir que valores nulos sejam pulados
+            df_resumo_setor = df_resumo_setor.copy()
+            if 'Tema' in df_resumo_setor.columns:
+                df_resumo_setor['Tema'] = df_resumo_setor['Tema'].astype(str).str.strip()
+                df_resumo_setor = df_resumo_setor[df_resumo_setor['Tema'].notna() & (df_resumo_setor['Tema'] != 'nan') & (df_resumo_setor['Tema'] != '')]
 
-            for index, row_setor in df_resumo_setor.iterrows():
-                if 'Tema' not in row_setor or pd.isna(row_setor['Tema']):
-                    print(f"Aviso: Linha {index} no df_resumo_setor não tem Tema. Pulando.")
-                    continue
-
-                tema = row_setor['Tema']
-
-                if tema != current_tema:
-                    if current_tema is not None:
-                        document.add_paragraph("")
-                    document.add_paragraph(f"*{tema}*")
-                    current_tema = tema
-
-                if 'Id' not in row_setor or pd.isna(row_setor['Id']):
-                    print(f"Aviso: Linha {index} no df_resumo_setor não tem Id válido. Pulando.")
-                    continue
-
+            # Opcional: ordenar dentro de cada tema por RelevanceScore descendente se a coluna existir
+            sort_within = False
+            if 'RelevanceScore' in df_resumo_setor.columns:
                 try:
-                    news_id = int(str(row_setor['Id']).strip())
-                except ValueError:
-                    print(f"Aviso: Não foi possível converter ID '{row_setor['Id']}' para inteiro na linha {index} de df_resumo_setor. Pulando.")
+                    df_resumo_setor['RelevanceScore'] = pd.to_numeric(df_resumo_setor['RelevanceScore'], errors='coerce')
+                    sort_within = True
+                except Exception:
+                    sort_within = False
+
+            # Iterar por grupo de Tema — garante que cada tema gera apenas um cabeçalho
+            for tema, grupo in df_resumo_setor.groupby('Tema', sort=False):
+                if grupo.empty:
                     continue
 
-                news_info_setor = final_df_setor[final_df_setor['Id'] == news_id]
-                if news_info_setor.empty:
-                    print(f"Aviso: ID {news_id} não encontrado em final_df_setor para resumo de Setor. Pulando.")
-                    continue
-                news_info_setor = news_info_setor.iloc[0]
+                document.add_paragraph(f"*{tema}*")
 
-                w_veiculo_setor = news_info_setor['Veiculo'].title()
-                w_titulo_setor = news_info_setor['Titulo']
-                w_url_setor = news_info_setor['UrlVisualizacao']
+                if sort_within:
+                    grupo = grupo.sort_values(by='RelevanceScore', ascending=False)
 
-                document.add_paragraph(f"{w_veiculo_setor}: {w_titulo_setor}")
+                for index, row_setor in grupo.iterrows():
+                    if 'Id' not in row_setor or pd.isna(row_setor['Id']):
+                        print(f"Aviso: Linha {index} no df_resumo_setor não tem Id válido. Pulando.")
+                        continue
 
-                if 'Resumo' not in row_setor or pd.isna(row_setor['Resumo']):
-                    print(f"Aviso: Linha {index} no df_resumo_setor (Tema {tema}) não tem Resumo. Adicionando placeholder.")
-                    document.add_paragraph("[Resumo não disponível]")
-                else:
-                    resumo_bruto = str(row_setor['Resumo'])
-                    document.add_paragraph(resumo_bruto)
+                    try:
+                        news_id = int(str(row_setor['Id']).strip())
+                    except ValueError:
+                        print(f"Aviso: Não foi possível converter ID '{row_setor['Id']}' para inteiro na linha {index} de df_resumo_setor. Pulando.")
+                        continue
 
-                short_url_setor = encurtar_url_seguro(w_url_setor, max_tentativas=3, delay=1)
-                document.add_paragraph(short_url_setor)
+                    news_info_setor = final_df_setor[final_df_setor['Id'] == news_id]
+                    if news_info_setor.empty:
+                        print(f"Aviso: ID {news_id} não encontrado em final_df_setor para resumo de Setor. Pulando.")
+                        continue
+                    news_info_setor = news_info_setor.iloc[0]
 
-                document.add_paragraph("*")
+                    w_veiculo_setor = news_info_setor['Veiculo'].title()
+                    w_titulo_setor = news_info_setor['Titulo']
+                    w_url_setor = news_info_setor['UrlVisualizacao']
+
+                    document.add_paragraph(f"{w_veiculo_setor}: {w_titulo_setor}")
+
+                    if 'Resumo' not in row_setor or pd.isna(row_setor['Resumo']):
+                        print(f"Aviso: Linha {index} no df_resumo_setor (Tema {tema}) não tem Resumo. Adicionando placeholder.")
+                        document.add_paragraph("[Resumo não disponível]")
+                    else:
+                        resumo_bruto = str(row_setor['Resumo'])
+                        document.add_paragraph(resumo_bruto)
+
+                    short_url_setor = encurtar_url_seguro(w_url_setor, max_tentativas=3, delay=1)
+                    document.add_paragraph(short_url_setor)
+
+                    document.add_paragraph("*")
 
     # 3. SEÇÃO DE EDITORIAIS (CONDICIONAL)
     if executar_editoriais:
@@ -512,9 +525,10 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
     paragraphs_to_remove_indices = []
 
-    pattern_line_start_paren_end_palavras = r"^\s*\*\s*\(.*?palavras\)\s*$"
+    pattern_line_start_paren_end_palavras = r"^\s*\*\s*\(\s*\d+\s*palavras\s*\)\s*$"
     pattern_line_start_resumo = r"^\s*\*Resumo.*$"
-    pattern_parenthesized_palavras_general = r"\s*[\*\s]*\(.*?\s*palavras\s*\)[\s\:\*]*"
+    # FIX: Mais específico - captura apenas (NN palavras) onde NN são dígitos, evitando capturar datas
+    pattern_parenthesized_palavras_general = r"\s*[\*\s]*\(\s*\d+\s*palavras\s*\)[\s\:\*]*"
     pattern_specific_resumo_prefixes = r"^\s*[\*\s]*Resumo\s*[:\*\s]*"
 
     for i, paragraph in enumerate(document.paragraphs):
@@ -546,8 +560,35 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
     print(f"\nTotal de parágrafos removidos: {len(paragraphs_to_remove_indices)}")
 
-    document.save(arq_resumo_final)
-    print(f"Arquivo DOCX salvo em: {arq_resumo_final}")
+    # ═══════════════════════════════════════════════════════════════
+    # VALIDAÇÃO ANTES DE SALVAR
+    # ═══════════════════════════════════════════════════════════════
+    try:
+        print("\n🔍 Validando integridade do documento antes de salvar...")
+        # Tentar acessar todos os parágrafos para detectar corrupção
+        for i, p in enumerate(document.paragraphs):
+            _ = p.text  # Acessar o texto para validar
+        print(f"✅ Documento validado: {len(document.paragraphs)} parágrafos íntegros")
+    except Exception as e:
+        print(f"❌ ERRO ao validar documento: {e}")
+        print("⚠️ Tentando recuperar salvando sem as alterações...")
+        # Se houver erro, tentar salvar mesmo assim
+    
+    # Salvar com tratamento de erro
+    try:
+        document.save(arq_resumo_final)
+        print(f"Arquivo DOCX salvo em: {arq_resumo_final}")
+        
+        # Verificar se o arquivo foi criado e tem tamanho
+        if os.path.exists(arq_resumo_final):
+            tamanho = os.path.getsize(arq_resumo_final)
+            print(f"✅ Arquivo criado com sucesso ({tamanho} bytes)")
+        else:
+            print(f"❌ ERRO: Arquivo não foi criado!")
+    except Exception as e:
+        print(f"❌ ERRO ao salvar documento: {e}")
+        print(f"   Traceback completo: {traceback.format_exc()}")
+        raise
     
     print(f"\n=== RELATÓRIO GERADO COM SUCESSO ===")
     print(f"Opção processada: {opcao_selecionada}")

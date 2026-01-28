@@ -120,10 +120,45 @@ def main_exec():
     configs = carregar_configs(caminho_json)
     setor_df = consultar_apis(configs)
 
-    # Salvar arquivo raw de SETOR antes da limpeza
+    # Salvar arquivo raw de SETOR antes da limpeza (sanitizando caracteres inválidos)
     from config import arq_api_original_setor_raw
+    import re, json, numpy as np
+    def _sanitize_value_for_excel(x):
+        # None/NA scalars
+        if x is None:
+            return x
+
+        # If value is an array-like (list/tuple/set/dict/ndarray), convert safely to string/json
+        if isinstance(x, (list, tuple, set, dict, np.ndarray)):
+            try:
+                return json.dumps(x, default=str, ensure_ascii=False)
+            except Exception:
+                return str(x)
+
+        # Safe check for pandas NA / NaN for scalar values
+        try:
+            if pd.isna(x):
+                return x
+        except Exception:
+            # pd.isna may raise for exotic objects; fall through to string conversion
+            pass
+
+        try:
+            s = str(x)
+            return re.sub(r'[\uD800-\uDFFF]', '', s)
+        except Exception:
+            try:
+                return str(x).encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+            except Exception:
+                return str(x)
+
     try:
-        setor_df.to_excel(arq_api_original_setor_raw, index=False)
+        setor_df_safe = setor_df.copy()
+        for col in setor_df_safe.columns:
+            if setor_df_safe[col].dtype == object:
+                setor_df_safe[col] = setor_df_safe[col].apply(_sanitize_value_for_excel)
+
+        setor_df_safe.to_excel(arq_api_original_setor_raw, index=False)
         print(f"Saved raw setor API output: {arq_api_original_setor_raw} ({len(setor_df)} records)")
     except Exception as e:
         print(f"Warning: could not save raw setor file: {e}")

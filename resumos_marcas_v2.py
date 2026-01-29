@@ -305,14 +305,17 @@ def corrigir_datas_inventadas(texto_resumo, texto_original):
     para "sexta-feira, 23 de agosto" ou até remove a menção ao dia da semana
     deixando apenas "em 23 de agosto".
     
+    Também expande "amanhã, 28" para "28 de fevereiro" (inventando mês).
+    
     Esta função:
-    1. Procura no texto ORIGINAL por padrões "dia_da_semana (DD)"
+    1. Procura no texto ORIGINAL por padrões "dia_da_semana (DD)" e "amanhã, DD"
     2. Usa essa informação para corrigir o resumo
     3. Converte datas inventadas de volta para o formato correto
     
     Padrões convertidos:
     - "sexta-feira, 23 de agosto" → "nesta sexta-feira (23)"
     - "em 23 de agosto" + original tem "sexta-feira (23)" → "nesta sexta-feira (23)"
+    - "28 de fevereiro" + original tem "amanhã, 28" → "amanhã (28)"
     """
     if not texto_resumo:
         return texto_resumo
@@ -325,6 +328,29 @@ def corrigir_datas_inventadas(texto_resumo, texto_original):
         'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
         'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
     ]
+    
+    # ════════════════════════════════════════════════════════════
+    # ESTRATÉGIA 0: Procurar por "amanhã, DD" no texto original
+    # ════════════════════════════════════════════════════════════
+    pattern_amanha = r'\bamanhã\s*,?\s*(\d{1,2})\b'
+    match_amanha = re.search(pattern_amanha, texto_original, re.IGNORECASE)
+    
+    if match_amanha:
+        numero_amanha = match_amanha.group(1)
+        print(f"🔍 DEBUG corrigir_datas: Encontrado 'amanhã, {numero_amanha}'")
+        
+        # Procurar no resumo por "DD de [mês]" e substituir por "amanhã (DD)"
+        pattern_data_inventada = r'\b' + numero_amanha + r'\s+de\s+(?:' + '|'.join(meses) + r')\b'
+        match_data = re.search(pattern_data_inventada, texto_resumo, re.IGNORECASE)
+        
+        if match_data:
+            print(f"   ✓ Encontrado padrão de data inventada: '{match_data.group(0)}'")
+            # Substituir "DD de [mês]" por "amanhã (DD)"
+            texto_resumo = re.sub(pattern_data_inventada, f'amanhã ({numero_amanha})', texto_resumo, flags=re.IGNORECASE)
+            print(f"   → Corrigido para: 'amanhã ({numero_amanha})'")
+            return texto_resumo
+        else:
+            print(f"   ✗ Padrão de data inventada NÃO encontrado para {numero_amanha}")
     
     # ════════════════════════════════════════════════════════════
     # ESTRATÉGIA 1: Procurar no texto original por "dia_da_semana (DD)"
@@ -494,22 +520,28 @@ def agrupar_noticias_por_similaridade(arq_textos):
     - NÃO reproduza linguagem de marketing ou promocional presente no texto original
     - Mantenha tom jornalístico neutro e factual
 
-    3. TRATAMENTO DE DATAS - EXTREMAMENTE IMPORTANTE:
-    ⚠️ REGRA CRÍTICA: Se o texto original menciona "nesta sexta-feira (23)" ou "na terça (12)", COPIE EXATAMENTE ASSIM NO RESUMO.
+    3. TRATAMENTO DE DATAS E TEMPOS VERBAIS - EXTREMAMENTE IMPORTANTE:
+    ⚠️ REGRA CRÍTICA 1: Se o texto original menciona "nesta sexta-feira (23)" ou "na terça (12)", COPIE EXATAMENTE ASSIM NO RESUMO.
+    ⚠️ REGRA CRÍTICA 2: PRESERVE O TEMPO VERBAL EXATO DO TEXTO ORIGINAL!
     
     ✅ EXEMPLOS CORRETOS (copie assim do texto original):
-    - Texto original: "oferece nesta sexta-feira (23)" → Resumo: "oferece nesta sexta-feira (23)"
-    - Texto original: "anunciou na terça-feira (15)" → Resumo: "anunciou na terça-feira (15)"
+    - Texto original: "oferece nesta sexta-feira (23)" → Resumo: "oferece nesta sexta-feira (23)" [presente]
+    - Texto original: "anunciou na terça-feira (15)" → Resumo: "anunciou na terça-feira (15)" [passado]
     - Texto original: "em 22 de janeiro de 2026" → Resumo: "em 22 de janeiro de 2026"
+    - Texto original: "deve ser precificada amanhã, 28" → Resumo: "deve ser precificada amanhã, 28" [futuro]
     
     ❌ EXEMPLOS ERRADOS (NUNCA FAÇA ASSIM):
     - ERRADO: Converter "nesta sexta-feira (23)" para "na sexta-feira, 23 de agosto"
     - ERRADO: Converter "na terça (12)" para "em 12 de março"
     - ERRADO: Inventar um mês quando o texto só menciona dia da semana
+    - ERRADO: Mudar "deve ser precificada" para "foi precificada" ou "é precificada"
     
-    INSTRUÇÃO FINAL SOBRE DATAS:
+    INSTRUÇÃO FINAL SOBRE DATAS E TEMPOS VERBAIS:
     → PRESERVE EXATAMENTE o formato de data do texto original
+    → PRESERVE EXATAMENTE o tempo verbal do texto original (não mude futuro para passado ou vice-versa)
     → NÃO EXPANDA "dia da semana (X)" para "dia da semana, X de [mês inventado]"
+    → Não faça suposições sobre datas ou tempos verbais baseado em conhecimento externo
+    → Se o texto diz "deve acontecer amanhã", use FUTURO, mesmo que hoje seja depois dessa data
     → Se não tiver certeza, copie o texto original exatamente como está
 
     4. FOCO:
@@ -770,14 +802,21 @@ def agrupar_noticias_por_similaridade(arq_textos):
    - Mantenha tom jornalístico estritamente neutro e factual
    - Se a notícia contém críticas ou problemas, relate-os objetivamente sem suavizar
 
-3. FOCO EM FATOS:
+3. DATAS E TEMPOS VERBAIS - EXTREMAMENTE IMPORTANTE:
+   - PRESERVE O TEMPO VERBAL EXATO DO TEXTO ORIGINAL (não mude futuro para passado ou vice-versa)
+   - Se o texto diz "deve acontecer amanhã", use FUTURO ("deve acontecer")
+   - Se o texto diz "foi feito ontem", use PASSADO ("foi feito")
+   - Não faça suposições baseado em conhecimento de data atual ou externa
+   - PRESERVE formatação de datas exatamente como aparecem no texto original
+
+4. FOCO EM FATOS:
    - O que aconteceu (ações concretas)
    - Quando aconteceu (datas, períodos)
    - Dados numéricos e estatísticos
    - Anúncios, lançamentos, eventos específicos
    - Resultados financeiros ou operacionais mensuráveis
 
-4. EVITE:
+5. EVITE:
    - Opiniões sobre qualidade ou valor
    - Superlativos e exageros
    - Promessas ou expectativas futuras não confirmadas

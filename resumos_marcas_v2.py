@@ -326,12 +326,22 @@ def remover_datas_passadas(texto_resumo):
     # ========== PADRÃO 2: Datas com formato "DD de MÊS" ou "DD de MÊS de YYYY" ==========
     # Remove: "em 29 de janeiro", "dia 29 de janeiro de 2026", "na quinta-feira (29)"
     meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+    dias_semana = r'(?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:-feira)?'
     
-    # Padrão 2a: "em DD de MÊS" (remove se NÃO precedido por verbos futuros)
-    # Primeiro, proteger datas futuras marcando-as temporariamente
+    # Padrão 2a: Proteger datas futuras marcando-as temporariamente
+    # Proteção 1: Expressões futuras explícitas
     texto_modificado = re.sub(
         r'\b(previsto para|prevista para|programado para|deve ocorrer em|ocorrerá em|acontecerá em|será em|será no dia|marcado para|agendado para)\s+(\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?)',
         r'__PROTEGER_DATA__\1 \2__FIM_PROTECAO__',
+        texto_modificado,
+        flags=re.IGNORECASE
+    )
+    
+    # Proteção 2: "próximo/próxima" + dia/data (NOVO)
+    # Exemplos: "no próximo dia 5", "na próxima segunda-feira", "próximo dia 10 de fevereiro"
+    texto_modificado = re.sub(
+        r'\b(no próximo|na próxima|próximo|próxima)\s+(dia|' + dias_semana + r')?\s*(\d{1,2}(?:\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?)?)',
+        r'__PROTEGER_DATA__\1 \2 \3__FIM_PROTECAO__',
         texto_modificado,
         flags=re.IGNORECASE
     )

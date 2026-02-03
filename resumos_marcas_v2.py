@@ -1,6 +1,6 @@
 # Etapa 2: Resumo de até 60 palavras, agrupamento semântico e geração de resumos finais com refinamento por subtemas
-# Versão 4: Adicionado prefixo automático com verbos do DOCX (singular/plural) baseado em QtdNoticias
-# Data: 21/10/2025
+# Versão 5: Adicionado tratamento de datas - Remove datas passadas, mantém datas futuras
+# Data: 03/02/2026
 
 import pandas as pd
 import os
@@ -179,23 +179,18 @@ def pos_processar_validacao_verbos(df_final, verbos_singular, verbos_plural):
                 print(f"   ✅ Substituído: '{verbo_usado}' → '{verbo_correto}'")
                 correcoes_realizadas += 1
             else:
-                print(f"   ⚠️ Verbo '{verbo_usado}' não encontrado no mapeamento para substituição")
-            
-            # 5. Atualizar QtdNoticias se estiver incorreto
-            if qtd_declarada != qtd_real:
-                df.at[idx, 'QtdNoticias'] = qtd_real
-                print(f"   ✅ QtdNoticias atualizado: {qtd_declarada} → {qtd_real}")
+                print(f"   ❌ Mapeamento não encontrado para '{verbo_usado}'")
     
-    print(f"\n✅ Pós-processamento concluído: {correcoes_realizadas} correção(ões) realizada(s)")
-    print("=" * 60)
+    if correcoes_realizadas > 0:
+        print(f"\n✅ Pós-processamento concluído: {correcoes_realizadas} correções realizadas")
+    else:
+        print(f"\n✅ Pós-processamento concluído: Nenhuma correção necessária")
     
     return df
 
 
 def obter_verbos_padrao():
-    """
-    Verbos de fallback caso o DOCX não possa ser lido
-    """
+    """Retorna listas de verbos padrão para singular e plural"""
     verbos_singular = [
         "repercute que",
         "aponta que",
@@ -299,6 +294,90 @@ def limpar_frases_introdutorias(texto_resumo):
     return texto_limpo.strip()
 
 
+def remover_datas_passadas(texto_resumo):
+    """
+    Nova função: Remove menções explícitas a datas que se referem a eventos no passado.
+    Mantém datas futuras (com verbos no futuro ou expressões como "previsto para", "deve ocorrer em").
+    
+    Esta função identifica padrões de datas associadas a verbos no passado e as remove,
+    mantendo apenas datas associadas a eventos futuros.
+    
+    Exemplos:
+    - Remove: "anunciou em 29/01/2026", "afirmou em 29 de janeiro", "em 29 de janeiro, a empresa lançou"
+    - Mantém: "previsto para 10 de fevereiro", "deve ocorrer em 11 de fevereiro"
+    
+    Args:
+        texto_resumo: texto do resumo a ser processado
+        
+    Returns:
+        texto sem datas passadas
+    """
+    if not texto_resumo:
+        return texto_resumo
+    
+    print(f"\n🔍 [REMOVER_DATAS_PASSADAS] Texto original: {texto_resumo[:100]}...")
+    
+    # ========== PADRÃO 1: Datas com formato DD/MM/YYYY ==========
+    # Remove: "em 29/01/2026", "dia 29/01/2026", "na data 29/01/2026"
+    # Padrão: palavra + "em" ou "dia" + data DD/MM/YYYY
+    padrao_data_barra = r'\b(em|dia|na data|no dia)\s+\d{1,2}/\d{1,2}/\d{4}\b'
+    texto_modificado = re.sub(padrao_data_barra, '', texto_resumo, flags=re.IGNORECASE)
+    
+    # ========== PADRÃO 2: Datas com formato "DD de MÊS" ou "DD de MÊS de YYYY" ==========
+    # Remove: "em 29 de janeiro", "dia 29 de janeiro de 2026", "na quinta-feira (29)"
+    meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+    
+    # Padrão 2a: "em DD de MÊS" (remove se NÃO precedido por verbos futuros)
+    # Primeiro, proteger datas futuras marcando-as temporariamente
+    texto_modificado = re.sub(
+        r'\b(previsto para|prevista para|programado para|deve ocorrer em|ocorrerá em|acontecerá em|será em|será no dia|marcado para|agendado para)\s+(\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?)',
+        r'__PROTEGER_DATA__\1 \2__FIM_PROTECAO__',
+        texto_modificado,
+        flags=re.IGNORECASE
+    )
+    
+    # Padrão 2b: Remover datas após verbos no passado (ex: "anunciou 2 de dezembro", "informou em 29 de janeiro")
+    # Lista de verbos comuns no passado
+    verbos_passado = r'(?:anunciou|informou|divulgou|publicou|comunicou|reportou|declarou|afirmou|revelou|confirmou|lançou|apresentou|mostrou|indicou)'
+    padrao_verbo_data = r'\b(' + verbos_passado + r')\s+(?:em\s+)?\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b'
+    texto_modificado = re.sub(padrao_verbo_data, r'\1', texto_modificado, flags=re.IGNORECASE)
+    
+    # Padrão 2c: Remover datas com preposições explícitas (padrão original)
+    padrao_data_extenso = r'\b(?:em|dia|no dia|na data|nesta|nesta data|neste dia)\s+\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b'
+    texto_modificado = re.sub(padrao_data_extenso, '', texto_modificado, flags=re.IGNORECASE)
+    
+    # ========== PADRÃO 3: Datas com dia da semana e número ==========
+    # Remove: "nesta quinta-feira (29)", "na última quinta-feira (29)"
+    dias_semana = r'(?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:-feira)?'
+    padrao_dia_semana = r'\b(?:nesta|neste|na|no|desta|deste|da|do|última|último)\s+' + dias_semana + r'\s*\(\d{1,2}\)'
+    texto_modificado = re.sub(padrao_dia_semana, '', texto_modificado, flags=re.IGNORECASE)
+    
+    # ========== PADRÃO 4: Limpeza de resíduos ==========
+    # Remove espaços duplos, vírgulas órfãs e outros resíduos
+    texto_modificado = re.sub(r'^\s*,\s*', '', texto_modificado)  # Remove vírgula no início
+    texto_modificado = re.sub(r'\s+,', ',', texto_modificado)  # Remove espaços antes de vírgulas
+    texto_modificado = re.sub(r',\s*,', ',', texto_modificado)  # Remove vírgulas duplas
+    texto_modificado = re.sub(r'\s{2,}', ' ', texto_modificado)  # Remove espaços múltiplos
+    texto_modificado = re.sub(r'\b(na|no|da|do)\s+(na|no|da|do|após|antes)\b', r'\2', texto_modificado, flags=re.IGNORECASE)  # Remove preposições duplicadas
+    
+    # ========== RESTAURAR DATAS PROTEGIDAS ==========
+    texto_modificado = re.sub(r'__PROTEGER_DATA__', '', texto_modificado)
+    texto_modificado = re.sub(r'__FIM_PROTECAO__', '', texto_modificado)
+    
+    # Limpar espaços no início e fim
+    texto_final = texto_modificado.strip()
+    
+    # Log das alterações
+    if texto_final != texto_resumo:
+        print(f"✅ [REMOVER_DATAS_PASSADAS] Datas passadas removidas")
+        print(f"   Original: {texto_resumo[:100]}...")
+        print(f"   Modificado: {texto_final[:100]}...")
+    else:
+        print(f"ℹ️  [REMOVER_DATAS_PASSADAS] Nenhuma data passada encontrada para remover")
+    
+    return texto_final
+
+
 def corrigir_datas_inventadas(texto_resumo, texto_original):
     """
     O DeepSeek às vezes ignora a instrução e expande "sexta-feira (23)" 
@@ -399,8 +478,7 @@ def corrigir_datas_inventadas(texto_resumo, texto_original):
         else:
             print(f"   ✗ Pattern 1 NÃO encontrado")
         
-        # Padrão 2: "em DD de [mês]" (sem menção a dia da semana)
-        # IMPORTANTE: Não faz return aqui, deixa o fluxo continuar para pattern 2
+        # Padrão 2: "em DD de [mês]" (sem dia da semana)
         pattern2 = r'\bem\s+' + numero_original + r'\s+de\s+(?:' + '|'.join(meses) + r')\b'
         match2 = re.search(pattern2, texto_resumo, re.IGNORECASE)
         if match2:
@@ -409,156 +487,110 @@ def corrigir_datas_inventadas(texto_resumo, texto_original):
         else:
             print(f"   ✗ Pattern 2 NÃO encontrado")
         
-        print(f"   → Resumo após correção: '{texto_resumo[:100]}...'")
-        # Se encontrou alguma coisa na Estratégia 1, retorna já corrigido
-        return texto_resumo
+        # Padrão 3: Apenas "DD de [mês]" (sem preposição)
+        pattern3 = r'\b' + numero_original + r'\s+de\s+(?:' + '|'.join(meses) + r')(?:\s+de\s+\d{4})?\b'
+        match3 = re.search(pattern3, texto_resumo, re.IGNORECASE)
+        if match3:
+            print(f"   ✓ Pattern 3 encontrado: '{match3.group(0)}'")
+            texto_resumo = re.sub(pattern3, f'nesta {dia_semana_original} ({numero_original})', texto_resumo, flags=re.IGNORECASE)
+        else:
+            print(f"   ✗ Pattern 3 NÃO encontrado")
     
-    # ════════════════════════════════════════════════════════════
-    # ESTRATÉGIA 2: Padrão fallback (se não conseguir info do original)
-    # ════════════════════════════════════════════════════════════
-    # Padrão: "dia_da_semana, DD de [mês]" → "nesta dia_da_semana (DD)"
-    pattern = r'\b(' + '|'.join(dias_semana) + r')\s*(?:-feira)?\s*,?\s*(\d{1,2})\s+de\s+(?:' + '|'.join(meses) + r')\b'
-    
-    def replacer(match):
-        dia = match.group(1)
-        numero = match.group(2)
-        # Garantir que tem "-feira" se não tiver
-        if '-feira' not in dia:
-            if 'segunda' in dia.lower():
-                dia = 'segunda-feira'
-            elif 'terça' in dia.lower():
-                dia = 'terça-feira'
-            elif 'quarta' in dia.lower():
-                dia = 'quarta-feira'
-            elif 'quinta' in dia.lower():
-                dia = 'quinta-feira'
-            elif 'sexta' in dia.lower():
-                dia = 'sexta-feira'
-            elif 'sábado' in dia.lower():
-                dia = 'sábado'
-            elif 'domingo' in dia.lower():
-                dia = 'domingo'
-        return f"nesta {dia} ({numero})"
-    
-    texto_corrigido = re.sub(pattern, replacer, texto_resumo, flags=re.IGNORECASE)
-    return texto_corrigido
+    return texto_resumo
 
 
-def agrupar_noticias_por_similaridade(arq_textos):
+def processar_marcas_v2(arq_textos):
+    """
+    Processa textos de notícias e gera resumos consolidados por marca.
+    
+    Versão 2 com melhorias:
+    - Agrupamento semântico mais inteligente
+    - Seleção balanceada de verbos iniciais
+    - Tratamento de datas: remove datas passadas, mantém datas futuras
+    """
+    import json
+    
+    # ========== Configuração da API DeepSeek ==========
     api_key = obter_chave_deepseek()
-
     HEADERS = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    LIMITE_CARACTERES_GRUPO = 12000
-
-    # Carregar verbos uma única vez
+    
+    LIMITE_CARACTERES_GRUPO = 12000  # Limite seguro para evitar overflow
+    
+    # Carregar verbos do DOCX ou usar padrão
     verbos_singular, verbos_plural = carregar_verbos_iniciais()
     
-    # DEBUG CRÍTICO: Verificar se os verbos foram classificados corretamente
-    print("\n🔍 === VERIFICAÇÃO DE VERBOS CARREGADOS ===")
-    print(f"Verbos SINGULAR ({len(verbos_singular)}):")
-    for v in verbos_singular:
-        print(f"  - {v}")
-    print(f"\nVerbos PLURAL ({len(verbos_plural)}):")
-    for v in verbos_plural:
-        print(f"  - {v}")
-    print("=" * 60)
-    
-    # Criar pools de verbos embaralhados (Opção A - distribuição balanceada)
+    # ========== NOVO: Pool de verbos para distribuição balanceada ==========
+    # Embaralhar uma vez no início, e ir consumindo
     pool_verbos = {
         'singular': verbos_singular.copy(),
         'plural': verbos_plural.copy()
     }
     random.shuffle(pool_verbos['singular'])
     random.shuffle(pool_verbos['plural'])
-    print(f"🎲 Pools de verbos inicializados e embaralhados\n")
-
-    # ================= NORMALIZAÇÃO CRÍTICA =================
-    def _normalize_df(df_in):
-        """
-        - Converte Canais (lista -> string) para evitar 'unhashable type: list'
-        - Garante Id como inteiro -> string (consistente com o restante do fluxo)
-        """
-        if df_in is None:
-            return pd.DataFrame(columns=["Id", "Titulo", "Conteudo", "Canais", "UrlVisualizacao"])
-        df = df_in.copy()
-
-        if 'Canais' in df.columns:
-            def _to_str(v):
-                if isinstance(v, list):
-                    if len(v) == 1:
-                        return str(v[0])
-                    return ', '.join(map(str, v))
-                return '' if pd.isna(v) else str(v)
-            df['Canais'] = df['Canais'].apply(_to_str)
-
-        if 'Id' in df.columns:
-            df['Id'] = pd.to_numeric(df['Id'], errors='ignore')
-            try:
-                df['Id'] = pd.to_numeric(df['Id'], errors='coerce').astype('Int64')
-                df = df.dropna(subset=['Id']).copy()
-                df['Id'] = df['Id'].astype(int).astype(str)
-            except Exception:
-                df['Id'] = df['Id'].astype(str)
-
+    print(f"🎲 Pools de verbos inicializados: {len(pool_verbos['singular'])} singular, {len(pool_verbos['plural'])} plural")
+    # =====================================================================
+    
+    def _normalize_df(arq):
+        """Normaliza dataframe de entrada"""
+        if isinstance(arq, str):
+            df = pd.read_excel(arq) if arq.endswith(('.xlsx', '.xls')) else pd.read_csv(arq)
+        else:
+            df = arq.copy()
+        
+        # Normalizar nomes de colunas
+        df.columns = df.columns.str.strip()
+        
+        # Mapeamento de colunas possíveis
+        col_map = {
+            'Título': 'Titulo',
+            'titulo': 'Titulo',
+            'Conteúdo': 'Conteudo',
+            'conteudo': 'Conteudo',
+            'Conteúdo da Notícia': 'Conteudo',
+            'Canal': 'Canais',
+            'canais': 'Canais',
+            'URL de Visualização': 'UrlVisualizacao',
+            'url_visualizacao': 'UrlVisualizacao'
+        }
+        
+        for old_name, new_name in col_map.items():
+            if old_name in df.columns:
+                df.rename(columns={old_name: new_name}, inplace=True)
+        
+        # Validar colunas obrigatórias
+        required = ['Id', 'Titulo', 'Conteudo', 'Canais']
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(f"Colunas obrigatórias ausentes: {missing}")
+        
         return df
 
-    def gerar_resumo_60(texto, id_):
-        for tentativa in range(3):
+    def gerar_resumo_60(texto, id_noticia):
+        """Gera resumo de até 60 palavras preservando o tempo verbal original"""
+        prompt = f"""Gere um resumo factual e objetivo de até 60 palavras sobre o conteúdo abaixo.
+
+INSTRUÇÕES IMPORTANTES:
+1. Relate apenas FATOS objetivos
+2. NÃO use adjetivos elogiosos
+3. PRESERVE O TEMPO VERBAL exatamente como aparece no texto original
+4. NÃO mencione datas específicas (nem passadas nem futuras) - descreva apenas os eventos
+5. Forneça APENAS o resumo, sem introduções
+
+Texto:
+{texto}"""
+        
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                print(f"📝 Gerando resumo curto para notícia ID: {id_}...")
-                prompt = """INSTRUÇÕES IMPORTANTES:
-
-    1. Forneça APENAS o resumo da notícia, sem frases introdutórias como "aqui está um resumo", "baseado no texto fornecido", etc.
-
-    2. NEUTRALIDADE OBRIGATÓRIA:
-    - Relate apenas FATOS objetivos e verificáveis
-    - NÃO use adjetivos elogiosos ou bajuladores (inovador, revolucionário, líder, excelente, incrível, extraordinário, etc.)
-    - NÃO faça juízos de valor sobre a marca ou seus produtos
-    - NÃO reproduza linguagem de marketing ou promocional presente no texto original
-    - Mantenha tom jornalístico neutro e factual
-
-    3. TRATAMENTO DE DATAS E TEMPOS VERBAIS - EXTREMAMENTE IMPORTANTE:
-    ⚠️ REGRA CRÍTICA 1: Se o texto original menciona "nesta sexta-feira (23)" ou "na terça (12)", COPIE EXATAMENTE ASSIM NO RESUMO.
-    ⚠️ REGRA CRÍTICA 2: PRESERVE O TEMPO VERBAL EXATO DO TEXTO ORIGINAL!
-    
-    ✅ EXEMPLOS CORRETOS (copie assim do texto original):
-    - Texto original: "oferece nesta sexta-feira (23)" → Resumo: "oferece nesta sexta-feira (23)" [presente]
-    - Texto original: "anunciou na terça-feira (15)" → Resumo: "anunciou na terça-feira (15)" [passado]
-    - Texto original: "em 22 de janeiro de 2026" → Resumo: "em 22 de janeiro de 2026"
-    - Texto original: "deve ser precificada amanhã, 28" → Resumo: "deve ser precificada amanhã, 28" [futuro]
-    
-    ❌ EXEMPLOS ERRADOS (NUNCA FAÇA ASSIM):
-    - ERRADO: Converter "nesta sexta-feira (23)" para "na sexta-feira, 23 de agosto"
-    - ERRADO: Converter "na terça (12)" para "em 12 de março"
-    - ERRADO: Inventar um mês quando o texto só menciona dia da semana
-    - ERRADO: Mudar "deve ser precificada" para "foi precificada" ou "é precificada"
-    
-    INSTRUÇÃO FINAL SOBRE DATAS E TEMPOS VERBAIS:
-    → PRESERVE EXATAMENTE o formato de data do texto original
-    → PRESERVE EXATAMENTE o tempo verbal do texto original (não mude futuro para passado ou vice-versa)
-    → NÃO EXPANDA "dia da semana (X)" para "dia da semana, X de [mês inventado]"
-    → Não faça suposições sobre datas ou tempos verbais baseado em conhecimento externo
-    → Se o texto diz "deve acontecer amanhã", use FUTURO, mesmo que hoje seja depois dessa data
-    → Se não tiver certeza, copie o texto original exatamente como está
-
-    4. FOCO:
-    - O que aconteceu (fatos)
-    - Quando aconteceu
-    - Quem estava envolvido
-    - Dados e números concretos
-
-    Resuma o conteúdo a seguir em até 60 palavras:
-
-    """ + texto
                 data = {
                     "model": "deepseek-chat",
                     "messages": [
                         {
                             "role": "system",
-                            "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é relatar fatos objetivamente, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra e direta."
+                            "content": "Você é um analista de notícias que produz resumos factuais e neutros."
                         },
                         {
                             "role": "user",
@@ -566,37 +598,46 @@ def agrupar_noticias_por_similaridade(arq_textos):
                         }
                     ],
                     "temperature": 0,
-                    "max_tokens": 120
+                    "max_tokens": 200
                 }
-                r = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data, timeout=45)
-                r.raise_for_status()
-                out = r.json()["choices"][0]["message"]["content"].strip()
-                if out:
-                    # Aplicar limpeza de frases introdutórias
-                    out = limpar_frases_introdutorias(out)
-                    # Corrigir datas que o DeepSeek possa ter inventado/expandido
-                    # Passa o texto original para melhorar a correção
-                    out = corrigir_datas_inventadas(out, texto)
-                    return out
+                
+                response = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data, timeout=30)
+                response.raise_for_status()
+                resumo = response.json()["choices"][0]["message"]["content"].strip()
+                
+                # Limpar frases introdutórias
+                resumo = limpar_frases_introdutorias(resumo)
+                
+                return resumo
+                
+            except requests.exceptions.Timeout:
+                print(f"⏱️ Timeout na tentativa {attempt + 1} para ID {id_noticia}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Backoff exponencial
+                else:
+                    return f"[Erro: timeout ao gerar resumo para ID {id_noticia}]"
             except Exception as e:
-                print(f"Resumo60 falhou (tentativa {tentativa+1}) ID {id_}: {e}")
-                time.sleep(1 + tentativa)
-        # fallback barato
-        titulo_e_conteudo = texto[:2000]
-        return titulo_e_conteudo[:260]
-
+                print(f"❌ Erro ao gerar resumo de 60 palavras para ID {id_noticia}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                else:
+                    return f"[Erro ao gerar resumo para ID {id_noticia}]"
+        
+        return ""
 
     def agrupar_por_similaridade(resumos):
         """
-        Agrupa resumos semanticamente relacionados - VERSÃO v2.1
+        Agrupa resumos por similaridade temática usando o DeepSeek.
+        Retorna lista de IDs de grupo para cada resumo.
         """
         import json
-        import re
         
         N = len(resumos)
+        if N == 1:
+            return [1]
         
-        prompt = f"""Você é um especialista em análise de notícias corporativas.
-
+        # Prompt detalhado para agrupamento inteligente
+        prompt = f"""
     TAREFA: Agrupe {N} resumos de notícias por SIMILARIDADE TEMÁTICA RELEVANTE.
 
     🚨 **PRIORIDADE MÁXIMA - EVENTOS IDÊNTICOS** (analise PRIMEIRO):
@@ -748,22 +789,24 @@ def agrupar_noticias_por_similaridade(arq_textos):
 
         data = {"model": "deepseek-chat","messages":[{"role":"user","content":prompt}],"temperature":0,"max_tokens":200}
         try:
-            resp = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data); resp.raise_for_status()
+            resp = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data, timeout=60)
+            resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"].strip()
+            
             m = re.search(r'\{.*\}', content, flags=re.DOTALL)
             if m:
                 try:
                     obj = json.loads(m.group(0))
                     grupos = obj.get("groups", [])
-                except Exception:
+                except json.JSONDecodeError:
                     grupos = []
             else:
                 grupos = []
-            if not grupos:
+            
+            if not grupos or len(grupos) != N:
                 nums = list(map(int, re.findall(r'\d+', content)))
-                grupos = nums[:N]
-            if not grupos:
-                grupos = list(range(1, N+1))
+                grupos = nums[:N] if len(nums) >= N else list(range(1, N+1))
+            
             if len(grupos) < N:
                 grupos += [grupos[-1]] * (N - len(grupos))
             elif len(grupos) > N:
@@ -802,16 +845,23 @@ def agrupar_noticias_por_similaridade(arq_textos):
    - Mantenha tom jornalístico estritamente neutro e factual
    - Se a notícia contém críticas ou problemas, relate-os objetivamente sem suavizar
 
-3. DATAS E TEMPOS VERBAIS - EXTREMAMENTE IMPORTANTE:
-   - PRESERVE O TEMPO VERBAL EXATO DO TEXTO ORIGINAL (não mude futuro para passado ou vice-versa)
-   - Se o texto diz "deve acontecer amanhã", use FUTURO ("deve acontecer")
-   - Se o texto diz "foi feito ontem", use PASSADO ("foi feito")
-   - Não faça suposições baseado em conhecimento de data atual ou externa
-   - PRESERVE formatação de datas exatamente como aparecem no texto original
+3. TRATAMENTO DE DATAS - REGRA CRÍTICA:
+   - Para eventos JÁ OCORRIDOS (verbos no passado): NÃO mencione datas específicas
+   - Para eventos FUTUROS (verbos no futuro): MANTENHA as datas
+   
+   Exemplos de REMOÇÃO (passado):
+   ❌ "anunciou em 29/01/2026" → ✅ "anunciou"
+   ❌ "afirmou em 29 de janeiro" → ✅ "afirmou"
+   ❌ "informou nesta quinta-feira (29)" → ✅ "informou"
+   ❌ "o banco lançou em 29 de janeiro" → ✅ "o banco lançou"
+   
+   Exemplos de MANUTENÇÃO (futuro):
+   ✅ "previsto para 10 de fevereiro" → MANTER
+   ✅ "deve ocorrer em 11 de fevereiro" → MANTER
+   ✅ "a estreia acontecerá em 11 de fevereiro" → MANTER
 
 4. FOCO EM FATOS:
    - O que aconteceu (ações concretas)
-   - Quando aconteceu (datas, períodos)
    - Dados numéricos e estatísticos
    - Anúncios, lançamentos, eventos específicos
    - Resultados financeiros ou operacionais mensuráveis
@@ -830,7 +880,7 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
             "messages": [
                 {
                     "role": "system",
-                    "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é consolidar informações de múltiplas notícias relatando apenas fatos objetivos, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra, direta e imparcial. Trate a marca como qualquer outra entidade noticiada, sem favorecimento."
+                    "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é consolidar informações de múltiplas notícias relatando apenas fatos objetivos, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra, direta e imparcial. Trate a marca como qualquer outra entidade noticiada, sem favorecimento. IMPORTANTE: Para eventos passados, NÃO mencione datas específicas. Para eventos futuros, MANTENHA as datas."
                 },
                 {
                     "role": "user",
@@ -875,7 +925,18 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
                 print(f"⚠️ ERRO em corrigir_datas_inventadas: {e}")
                 texto_corrigido = texto_limpo
             
-            return texto_corrigido
+            # ========== NOVA ETAPA: Remover datas passadas ==========
+            try:
+                texto_final = remover_datas_passadas(texto_corrigido)
+                if not isinstance(texto_final, str):
+                    print(f"⚠️ AVISO: remover_datas_passadas retornou tipo {type(texto_final)}")
+                    texto_final = str(texto_final)
+            except Exception as e:
+                print(f"⚠️ ERRO em remover_datas_passadas: {e}")
+                texto_final = texto_corrigido
+            # =======================================================
+            
+            return texto_final
         except Exception as e:
             print(f"Erro ao gerar resumo final: {e}")
             return ""
@@ -1022,8 +1083,12 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
             df_final = df_final[~df_final['Resumo'].str.contains(r'^\(.*foco.*\)$', regex=True)]
             for marca in w_marcas:
                 df_final['Resumo'] = df_final['Resumo'].str.replace(f"(?i)\\b{re.escape(marca)}\\b", f"*{marca}*", regex=True)
+        
+        # ========== PÓS-PROCESSAMENTO: Validação de verbos ==========
+        df_final = pos_processar_validacao_verbos(df_final, verbos_singular, verbos_plural)
+        # ===========================================================
 
-        print(f"\n✅ Processamento concluído! {len(df_final)} resumos gerados com prefixos.")
+        print(f"\n✅ Processamento concluído! {len(df_final)} resumos gerados com prefixos e datas tratadas.")
         return df_final
 
     except Exception as e:
@@ -1031,3 +1096,14 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
         print(f"Erro geral no processamento: {e}")
         print(_tb.format_exc(limit=1))
         return pd.DataFrame(columns=["Marca", "GrupoID", "QtdNoticias", "Ids", "Resumo"])
+
+
+# ========== ALIAS PARA COMPATIBILIDADE COM CÓDIGO ANTIGO ==========
+def agrupar_noticias_por_similaridade(arq_textos):
+    """
+    Alias para processar_marcas_v2() - mantido para compatibilidade com código existente.
+    
+    Esta função é um wrapper que chama processar_marcas_v2 com o mesmo comportamento.
+    Mantida para não quebrar imports em outros módulos (ex: main_menu.py).
+    """
+    return processar_marcas_v2(arq_textos)

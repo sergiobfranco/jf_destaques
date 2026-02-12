@@ -37,20 +37,22 @@ def encurtar_url_seguro(url_original, max_tentativas=3, delay=2):
     
     for tentativa in range(max_tentativas):
         try:
-            short_url = s.tinyurl.short(url_str)
+            # Tentar is.gd primeiro (sem tela intermediária)
+            short_url = s.isgd.short(url_str)
             return short_url
             
         except Exception as e:
             erro_str = str(e)
-            print(f"Tentativa {tentativa + 1}/{max_tentativas} - Erro TinyURL: {erro_str}")
+            print(f"Tentativa {tentativa + 1}/{max_tentativas} - Erro is.gd: {erro_str}")
             
             if tentativa == max_tentativas - 1:
                 try:
-                    short_url = s.isgd.short(url_str)
-                    print(f"URL encurtada com serviço alternativo (is.gd)")
+                    # Usar TinyURL apenas como último recurso
+                    short_url = s.tinyurl.short(url_str)
+                    print(f"URL encurtada com TinyURL (fallback)")
                     return short_url
                 except Exception as e2:
-                    print(f"Erro também no serviço alternativo: {str(e2)}")
+                    print(f"Erro também no TinyURL: {str(e2)}")
                     break
             
             if tentativa < max_tentativas - 1:

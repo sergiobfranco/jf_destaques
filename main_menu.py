@@ -516,7 +516,7 @@ def processar_relatorio():
 
             if setor_df.empty:
                 st.warning("\u26a0\ufe0f ATEN\u00c7\u00c3O: Nenhum registro retornado pelas APIs de SETOR!")
-                st.info("\ud83d\udd0d Criando DataFrame de SETOR vazio com estrutura padr\u00e3o...")
+                st.info("🔍 Criando DataFrame de SETOR vazio com estrutura padrão...")
                 colunas_setor = [
                     'Id', 'Titulo', 'Conteudo', 'UrlOriginal', 'DataVeiculacao', 'IdVeiculo', 'Canais'
                 ]

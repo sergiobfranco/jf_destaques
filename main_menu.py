@@ -78,6 +78,20 @@ def verificar_lock_ativo():
     except:
         return False
 
+def limpar_surrogates(texto):
+    """Remove caracteres surrogates problemáticos"""
+    if not isinstance(texto, str):
+        return texto
+    
+    # Remover surrogates
+    return texto.encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+
+def limpar_registro(registro):
+    """Limpa todos os campos de texto de um registro"""
+    if isinstance(registro, dict):
+        return {k: limpar_surrogates(v) if isinstance(v, str) else v 
+                for k, v in registro.items()}
+    return registro
 
 def configurar_interface():
     """Configura a interface Streamlit"""
@@ -213,7 +227,17 @@ def consultar_apis(configs, max_tentativas=3, timeout_base=30):
                 
                 if response.status_code == 200:
                     dados = response.json()
-                    df_api = pd.DataFrame(dados)
+                    
+                    # Limpar surrogates de todos os registros
+                    try:
+                        dados_limpos = [limpar_registro(r) for r in dados]
+                        st.info(f"  🧹 Limpeza de surrogates aplicada em {len(dados_limpos)} registros")
+                    except Exception as e:
+                        st.warning(f"  ⚠️ Erro na limpeza: {str(e)}. Usando dados originais.")
+                        dados_limpos = dados
+                    
+                    # Criar DataFrame com dados limpos
+                    df_api = pd.DataFrame(dados_limpos)
                     lista_df.append(df_api)
                     st.success(f"  ✅ Sucesso: {len(df_api)} registros")
                     sucesso = True

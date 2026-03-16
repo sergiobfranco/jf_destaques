@@ -14,6 +14,14 @@ import os
 import traceback
 from datetime import datetime
 
+# Função utilitária para limpar nomes de veículos para o relatório.
+# Remove toda a parte a partir da primeira barra ("/") — inclusive —
+# deixando apenas o nome do veículo.
+def sanitizar_veiculo(veiculo):
+    if not isinstance(veiculo, str):
+        return veiculo
+    return re.split(r"\s*/\s*", veiculo, maxsplit=1)[0].strip()
+
 # 1. FUNÇÃO AUXILIAR PARA ENCURTAMENTO DE URL
 def encurtar_url_seguro(url_original, max_tentativas=3, delay=2):
     """
@@ -84,6 +92,8 @@ def processar_editoriais_integrado(final_df_editorial, document, opcao_seleciona
                 'Veículo Desconhecido'
             )
             w_veiculo_editorial = w_veiculo_editorial.title()
+            # Apenas para apresentação no relatório: remover a parte após a barra
+            w_veiculo_editorial = sanitizar_veiculo(w_veiculo_editorial)
             
             w_titulo_editorial = (
                 row_editorial.get('Titulo') or 
@@ -154,7 +164,10 @@ def obter_nome_veiculo(codigo_veiculo):
         682: "O GLOBO / RIO DE JANEIRO"
     }
     nome = nomes_veiculos.get(codigo_veiculo, f"VEÍCULO CÓDIGO {codigo_veiculo}")
-    return nome.title()
+    nome = nome.title()
+    # Apenas para apresentação no relatório: remover a parte após a barra
+    nome = sanitizar_veiculo(nome)
+    return nome
 
 def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevantes, df_resumo_marca, 
                           df_resumo_marca_irrelevantes, final_df_marca, df_resumo_setor, final_df_setor, 
@@ -226,6 +239,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
                 news_info_marca = news_info_marca.iloc[0]
                 w_veiculo_marca = news_info_marca['Veiculo'].title()
+                # Apenas para apresentação no relatório: remover a parte após a barra
+                w_veiculo_marca = sanitizar_veiculo(w_veiculo_marca)
                 w_url_marca = news_info_marca['UrlVisualizacao']
 
                 short_url_marca = encurtar_url_seguro(w_url_marca, max_tentativas=3, delay=1)
@@ -301,6 +316,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
                 news_info_marca = news_info_marca.iloc[0]
                 w_veiculo_marca = news_info_marca['Veiculo'].title()
+                # Apenas para apresentação no relatório: remover a parte após a barra
+                w_veiculo_marca = sanitizar_veiculo(w_veiculo_marca)
                 w_url_marca = news_info_marca['UrlVisualizacao']
 
                 short_url_marca = encurtar_url_seguro(w_url_marca, max_tentativas=3, delay=1)
@@ -415,6 +432,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
 
                 original_row_marca = original_row_marca.iloc[0]
                 veiculo = original_row_marca['Veiculo'].title()
+                # Apenas para apresentação no relatório: remover a parte após a barra
+                veiculo = sanitizar_veiculo(veiculo)
                 titulo = original_row_marca['Titulo']
                 canais_commodities = original_row_marca.get('CanaisCommodities', '')
 
@@ -493,6 +512,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
                     news_info_setor = news_info_setor.iloc[0]
 
                     w_veiculo_setor = news_info_setor['Veiculo'].title()
+                    # Apenas para apresentação no relatório: remover a parte após a barra
+                    w_veiculo_setor = sanitizar_veiculo(w_veiculo_setor)
                     w_titulo_setor = news_info_setor['Titulo']
                     w_url_setor = news_info_setor['UrlVisualizacao']
 

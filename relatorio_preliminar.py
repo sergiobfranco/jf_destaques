@@ -11,6 +11,14 @@ import requests
 import os
 from datetime import datetime
 
+# Função utilitária para limpar nomes de veículos para o relatório.
+# Remove toda a parte a partir da primeira barra ("/") — inclusive —
+# deixando apenas o nome do veículo.
+def sanitizar_veiculo(veiculo):
+    if not isinstance(veiculo, str):
+        return veiculo
+    return re.split(r"\s*/\s*", veiculo, maxsplit=1)[0].strip()
+
 # IMPORTAR O SISTEMA DE ENCURTAMENTO OTIMIZADO
 from encurtador_urls import GerenciadorURLs, testar_servicos_encurtamento
 
@@ -42,6 +50,8 @@ def processar_editoriais_integrado(final_df_editorial, document, gerenciador_url
                 row_editorial.get('veiculo') or 
                 'Veículo Desconhecido'
             )
+            # Apenas para apresentação no relatório: remover a parte após a barra
+            w_veiculo_editorial = sanitizar_veiculo(w_veiculo_editorial)
             
             w_titulo_editorial = (
                 row_editorial.get('Titulo') or 
@@ -149,6 +159,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
             news_info_marca = news_info_marca.iloc[0]
 
             w_veiculo_marca = news_info_marca['Veiculo']
+            # Apenas para apresentação no relatório: remover a parte após a barra
+            w_veiculo_marca = sanitizar_veiculo(w_veiculo_marca)
             w_url_marca = news_info_marca['UrlVisualizacao']
 
             # ENCURTAR URL USANDO GERENCIADOR (COM CACHE)
@@ -226,6 +238,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
             news_info_marca = news_info_marca.iloc[0]
 
             w_veiculo_marca = news_info_marca['Veiculo']
+            # Apenas para apresentação no relatório: remover a parte após a barra
+            w_veiculo_marca = sanitizar_veiculo(w_veiculo_marca)
             w_url_marca = news_info_marca['UrlVisualizacao']
 
             # ENCURTAR URL USANDO GERENCIADOR (COM CACHE)
@@ -310,6 +324,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
             original_row_marca = original_row_marca.iloc[0]
 
             veiculo = original_row_marca['Veiculo']
+            # Apenas para apresentação no relatório: remover a parte após a barra
+            veiculo = sanitizar_veiculo(veiculo)
             titulo = original_row_marca['Titulo']
             canais_commodities = original_row_marca.get('CanaisCommodities', '')
 
@@ -364,6 +380,8 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
         news_info_setor = news_info_setor.iloc[0]
 
         w_veiculo_setor = news_info_setor['Veiculo']
+        # Apenas para apresentação no relatório: remover a parte após a barra
+        w_veiculo_setor = sanitizar_veiculo(w_veiculo_setor)
         w_titulo_setor = news_info_setor['Titulo']
         w_url_setor = news_info_setor['UrlVisualizacao']
 

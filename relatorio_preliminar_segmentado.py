@@ -56,7 +56,7 @@ def encurtar_url_seguro(url_original, gerenciador_urls, max_tentativas=3, delay=
         print(f"⚠️ Erro ao encurtar: {str(e)[:100]}")
         return url_str
 
-def processar_editoriais_integrado(final_df_editorial, document, opcao_selecionada=1):
+def processar_editoriais_integrado(final_df_editorial, document, gerenciador_urls, opcao_selecionada=1):
     """
     Processa editoriais de forma integrada (substitui toda a seção de editoriais)
     """
@@ -537,7 +537,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
         document.add_paragraph("--- EDITORIAIS ---")    
         document.add_paragraph("")
 
-        processar_editoriais_integrado(final_df_editorial, document, opcao_selecionada)
+        processar_editoriais_integrado(final_df_editorial, document, gerenciador_urls, opcao_selecionada)
 
     # 4. SEÇÃO DE FINALIZAÇÃO (SEMPRE EXECUTADA)
     print("\n=== SEÇÃO 4: FINALIZAÇÃO ===")

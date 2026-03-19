@@ -139,14 +139,14 @@ def validar_url(url):
 
 def encurtar_url_seguro(url_original, max_tentativas_por_servico=2, delay=1):
     """
-    Encurta URLs com múltiplos serviços de fallback
+    Encurta URL com fallback automático entre múltiplos serviços
     
-    ORDEM DE PRIORIDADE (sem TinyURL):
-    1. v.gd       - Clone do is.gd, muito estável
-    2. clck.ru    - Rápido e confiável
-    3. da.gd      - Simples e direto
-    4. ulvis.net  - Backup (limite de 500/dia)
-    5. is.gd      - Último recurso (instável)
+    ORDEM DE PRIORIDADE (SEM TELA INTERMEDIÁRIA):
+    1. clck.ru   → Redirecionamento direto, rápido, ilimitado ✅
+    2. da.gd     → Redirecionamento direto, estável, ilimitado ✅
+    3. is.gd     → Redirecionamento direto, lento mas confiável ✅
+    4. v.gd      → TEM TELA DE AVISO (último recurso) ⚠️
+    5. ulvis.net → Limite de ~500 URLs/dia
     
     Args:
         url_original: URL para encurtar
@@ -166,13 +166,13 @@ def encurtar_url_seguro(url_original, max_tentativas_por_servico=2, delay=1):
     url_str = str(url_original).strip()
     
     # Lista de serviços em ordem de preferência
-    # NOTA: TinyURL REMOVIDO (tem ads e limite de 1000/mês)
+    # NOVA ORDEM: Serviços SEM tela intermediária primeiro
     servicos = [
-        ("v.gd", encurtar_com_vgd),
-        ("clck.ru", encurtar_com_clckru),
-        ("da.gd", encurtar_com_dagd),
-        ("ulvis.net", encurtar_com_ulvis),
-        ("is.gd", encurtar_com_isgd),  # Último recurso
+        ("da.gd", encurtar_com_dagd),         # 1º - Aceita URLs longas, sem tela ✅
+        ("is.gd", encurtar_com_isgd),         # 2º - Backup confiável
+        ("clck.ru", encurtar_com_clckru),     # 3º - Para URLs curtas
+        ("v.gd", encurtar_com_vgd),           # 4º - TEM TELA DE AVISO
+        ("ulvis.net", encurtar_com_ulvis),    # 5º - Limite diário
     ]
     
     print(f"🔗 Encurtando: {url_str[:60]}...")

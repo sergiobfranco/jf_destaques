@@ -2,7 +2,7 @@
 # Atualização: Resumos de Marca e Citações agora ficam na mesma linha das publicações
 
 import pandas as pd
-import pyshorteners
+from encurtador_urls import GerenciadorURLs
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_LINE_SPACING
@@ -14,6 +14,7 @@ import os
 import traceback
 from datetime import datetime
 
+
 # Função utilitária para limpar nomes de veículos para o relatório.
 # Remove toda a parte a partir da primeira barra ("/") — inclusive —
 # deixando apenas o nome do veículo.
@@ -23,51 +24,37 @@ def sanitizar_veiculo(veiculo):
     return re.split(r"\s*/\s*", veiculo, maxsplit=1)[0].strip()
 
 # 1. FUNÇÃO AUXILIAR PARA ENCURTAMENTO DE URL
-def encurtar_url_seguro(url_original, max_tentativas=3, delay=2):
+def encurtar_url_seguro(url_original, gerenciador_urls, max_tentativas=3, delay=2):
     """
-    Função auxiliar para encurtar URLs de forma segura com tratamento de erro robusto
-    """
-    import pyshorteners
-    import requests
-    import time
+    Função auxiliar para encurtar URLs usando GerenciadorURLs com fallback robusto
     
+    Args:
+        url_original: URL para encurtar
+        gerenciador_urls: Instância do GerenciadorURLs
+        max_tentativas: Mantido para compatibilidade (não usado)
+        delay: Mantido para compatibilidade (não usado)
+    
+    Returns:
+        URL encurtada ou URL original se falhar
+    """
+    
+    # Validação básica
     if not url_original or pd.isna(url_original) or str(url_original).strip() == '':
-        print(f"URL vazia ou inválida: {url_original}")
+        print(f"⚠️ URL vazia: {url_original}")
         return str(url_original) if url_original else "URL não disponível"
     
     url_str = str(url_original).strip()
     
     if not url_str.startswith(('http://', 'https://')):
-        print(f"URL não tem protocolo válido: {url_str}")
+        print(f"⚠️ URL sem protocolo: {url_str}")
         return url_str
     
-    s = pyshorteners.Shortener()
-    
-    for tentativa in range(max_tentativas):
-        try:
-            # Tentar is.gd primeiro (sem tela intermediária)
-            short_url = s.isgd.short(url_str)
-            return short_url
-            
-        except Exception as e:
-            erro_str = str(e)
-            print(f"Tentativa {tentativa + 1}/{max_tentativas} - Erro is.gd: {erro_str}")
-            
-            if tentativa == max_tentativas - 1:
-                try:
-                    # Usar TinyURL apenas como último recurso
-                    short_url = s.tinyurl.short(url_str)
-                    print(f"URL encurtada com TinyURL (fallback)")
-                    return short_url
-                except Exception as e2:
-                    print(f"Erro também no TinyURL: {str(e2)}")
-                    break
-            
-            if tentativa < max_tentativas - 1:
-                time.sleep(delay)
-    
-    print(f"Falha em todos os serviços de encurtamento. Usando URL original.")
-    return url_str
+    # Usar GerenciadorURLs (já tem fallback interno: v.gd → clck.ru → da.gd → ulvis.net → is.gd)
+    try:
+        return gerenciador_urls.obter_url_curta(url_str)
+    except Exception as e:
+        print(f"⚠️ Erro ao encurtar: {str(e)[:100]}")
+        return url_str
 
 def processar_editoriais_integrado(final_df_editorial, document, opcao_selecionada=1):
     """
@@ -120,7 +107,7 @@ def processar_editoriais_integrado(final_df_editorial, document, opcao_seleciona
             document.add_paragraph(f"{w_veiculo_editorial}: {w_titulo_editorial}")
             
             if w_url_editorial and w_url_editorial != 'URL Não Disponível':
-                short_url_editorial = encurtar_url_seguro(w_url_editorial, max_tentativas=3, delay=1)
+                short_url_editorial = encurtar_url_seguro(w_url_editorial, gerenciador_urls, max_tentativas=3, delay=1)
             else:
                 short_url_editorial = w_url_editorial
                 print(f"URL inválida para editorial {index + 1}, usando valor original")
@@ -179,7 +166,18 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
         opcao_selecionada (int): Opção selecionada (1-7)
         codigo_veiculo (int): Código do veículo (para opções 4-7)
     """
+    # ========================================================================
+    # INICIALIZAR GERENCIADOR DE URLs COM CACHE
+    # ========================================================================
+    print("\n" + "="*80)
+    print("INICIALIZANDO SISTEMA DE ENCURTAMENTO DE URLs")
+    print("="*80)
     
+    gerenciador_urls = GerenciadorURLs('dados/cache_urls.json')
+    
+    print("="*80 + "\n")
+
+
     # Determinar quais seções executar baseado na opção selecionada
     executar_marcas = opcao_selecionada in [1, 2]
     executar_setor = opcao_selecionada in [1, 3, 4, 5, 6, 7]
@@ -243,7 +241,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
                 w_veiculo_marca = sanitizar_veiculo(w_veiculo_marca)
                 w_url_marca = news_info_marca['UrlVisualizacao']
 
-                short_url_marca = encurtar_url_seguro(w_url_marca, max_tentativas=3, delay=1)
+                short_url_marca = encurtar_url_seguro(w_url_marca, gerenciador_urlsmax_tentativas=3, delay=1)
 
                 if news_id in final_df_small_marca['Id'].values:
                     final_df_small_marca.loc[final_df_small_marca['Id'] == news_id, 'ShortURL'] = short_url_marca
@@ -320,7 +318,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
                 w_veiculo_marca = sanitizar_veiculo(w_veiculo_marca)
                 w_url_marca = news_info_marca['UrlVisualizacao']
 
-                short_url_marca = encurtar_url_seguro(w_url_marca, max_tentativas=3, delay=1)
+                short_url_marca = encurtar_url_seguro(w_url_marca, gerenciador_urls, max_tentativas=3, delay=1)
 
                 if news_id in final_df_small_marca_irrelevantes['Id'].values:
                     final_df_small_marca_irrelevantes.loc[final_df_small_marca_irrelevantes['Id'] == news_id, 'ShortURL'] = short_url_marca
@@ -526,7 +524,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
                         resumo_bruto = str(row_setor['Resumo'])
                         document.add_paragraph(resumo_bruto)
 
-                    short_url_setor = encurtar_url_seguro(w_url_setor, max_tentativas=3, delay=1)
+                    short_url_setor = encurtar_url_seguro(w_url_setor, gerenciador_urls, max_tentativas=3, delay=1)
                     document.add_paragraph(short_url_setor)
 
                     document.add_paragraph("*")

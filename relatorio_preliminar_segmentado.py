@@ -241,7 +241,7 @@ def gerar_versao_preliminar(final_df_small_marca, final_df_small_marca_irrelevan
                 w_veiculo_marca = sanitizar_veiculo(w_veiculo_marca)
                 w_url_marca = news_info_marca['UrlVisualizacao']
 
-                short_url_marca = encurtar_url_seguro(w_url_marca, gerenciador_urlsmax_tentativas=3, delay=1)
+                short_url_marca = encurtar_url_seguro(w_url_marca, gerenciador_urls, max_tentativas=3, delay=1)
 
                 if news_id in final_df_small_marca['Id'].values:
                     final_df_small_marca.loc[final_df_small_marca['Id'] == news_id, 'ShortURL'] = short_url_marca

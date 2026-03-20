@@ -346,11 +346,21 @@ def remover_datas_passadas(texto_resumo):
         flags=re.IGNORECASE
     )
     
-    # Padrão 2b: Remover datas após verbos no passado (ex: "anunciou 2 de dezembro", "informou em 29 de janeiro")
-    # Lista de verbos comuns no passado
-    verbos_passado = r'(?:anunciou|informou|divulgou|publicou|comunicou|reportou|declarou|afirmou|revelou|confirmou|lançou|apresentou|mostrou|indicou)'
-    padrao_verbo_data = r'\b(' + verbos_passado + r')\s+(?:em\s+)?\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b'
+    # Padrão 2b: Remover datas após verbos no passado
+    # Lista de verbos comuns no passado (ATUALIZADA - incluindo "condenou", "pautaram", etc.)
+    verbos_passado = r'(?:anunciou|informou|divulgou|publicou|comunicou|reportou|declarou|afirmou|revelou|confirmou|lançou|apresentou|mostrou|indicou|condenou|condenaram|pautou|pautaram|pautaram|decidiu|decidiram|aprovou|aprovaram|realizou|realizaram|registrou|registraram|assinou|assinaram|entregou|entregaram|enviou|enviaram|recebeu|receberam|aceitou|aceitaram|rejeitou|rejeitaram|negou|negaram|admitiu|admitiram|reconheceu|reconheceram|criticou|criticaram|acusou|acusaram|denunciou|denunciaram|investigou|investigaram|descobriu|descobriram|encontrou|encontraram|identificou|identificaram|descartou|descartaram)'
+    
+    # CORREÇÃO CRÍTICA: Capturar vírgula opcional APÓS o verbo e removê-la junto com a data
+    # Exemplos: "condenou, em 17 de setembro" → "condenou"
+    # Padrão: verbo + vírgula opcional + espaços + "em" opcional + data
+    padrao_verbo_data = r'\b(' + verbos_passado + r')\s*,?\s*(?:em\s+|no\s+|na\s+|dia\s+|nesta\s+|desta\s+|naquele\s+|daquele\s+|nessa\s+|desse\s+|naquela\s+|daquela\s+)?\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\s*,?'
     texto_modificado = re.sub(padrao_verbo_data, r'\1', texto_modificado, flags=re.IGNORECASE)
+    
+    # Padrão 2b2: Remover datas após verbos no passado com "para"
+    # Exemplos: "pautaram para 18 de setembro" → "pautaram"
+    # Nota: Mesmo que "para" indique futuro, o verbo está no passado, então a ação já ocorreu
+    padrao_verbo_para_data = r'\b(' + verbos_passado + r')\s+para\s+(?:o\s+dia\s+|esta\s+\w+-feira\s+\(\d{1,2}\)|)?\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b'
+    texto_modificado = re.sub(padrao_verbo_para_data, r'\1', texto_modificado, flags=re.IGNORECASE)
     
     # Padrão 2c: Remover datas com preposições explícitas (padrão original)
     padrao_data_extenso = r'\b(?:em|dia|no dia|na data|nesta|nesta data|neste dia)\s+\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b'
@@ -388,126 +398,132 @@ def remover_datas_passadas(texto_resumo):
     return texto_final
 
 
-def corrigir_datas_inventadas(texto_resumo, texto_original):
+def remover_datas_nao_presentes_no_original(texto_resumo, texto_original):
     """
-    O DeepSeek às vezes ignora a instrução e expande "sexta-feira (23)" 
-    para "sexta-feira, 23 de agosto" ou até remove a menção ao dia da semana
-    deixando apenas "em 23 de agosto".
+    Remove datas mencionadas no resumo que NÃO estão presentes no texto original.
+    Isso previne alucinações do modelo que inventa datas.
     
-    Também expande "amanhã, 28" para "28 de fevereiro" (inventando mês).
-    
-    Esta função:
-    1. Procura no texto ORIGINAL por padrões "dia_da_semana (DD)" e "amanhã, DD"
-    2. Usa essa informação para corrigir o resumo
-    3. Converte datas inventadas de volta para o formato correto
-    
-    Padrões convertidos:
-    - "sexta-feira, 23 de agosto" → "nesta sexta-feira (23)"
-    - "em 23 de agosto" + original tem "sexta-feira (23)" → "nesta sexta-feira (23)"
-    - "28 de fevereiro" + original tem "amanhã, 28" → "amanhã (28)"
+    Args:
+        texto_resumo: resumo gerado
+        texto_original: texto da notícia original
+        
+    Returns:
+        resumo com datas inventadas removidas
     """
-    if not texto_resumo:
+    if not texto_resumo or not texto_original:
         return texto_resumo
     
-    dias_semana = [
-        'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo',
-        'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado-feira', 'domingo-feira'
+    # Extrair todas as datas do texto original
+    meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+    
+    # Padrões de datas no original
+    padroes_original = [
+        r'\b\d{1,2}/\d{1,2}/\d{4}\b',  # DD/MM/YYYY
+        r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b',  # DD de mês [de YYYY]
+        r'\b(?:nesta|desta|na|no)\s+(?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:-feira)?\s*\(\d{1,2}\)\b',  # nesta quinta (23)
+        r'\bamanhã\s*,?\s*\d{1,2}\b',  # amanhã, 28
     ]
-    meses = [
-        'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-        'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
+    
+    datas_no_original = set()
+    for padrao in padroes_original:
+        matches = re.findall(padrao, texto_original, re.IGNORECASE)
+        datas_no_original.update(matches)
+    
+    print(f"🔍 [REMOVER_DATAS_NAO_PRESENTES] Datas encontradas no original: {list(datas_no_original)}")
+    
+    # Agora, procurar datas no resumo que NÃO estão no original
+    texto_modificado = texto_resumo
+    
+    # Padrões de datas no resumo a serem verificados
+    padroes_resumo = [
+        (r'\b\d{1,2}/\d{1,2}/\d{4}\b', lambda m: m.group(0)),  # DD/MM/YYYY
+        (r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', lambda m: m.group(0)),  # DD de mês
+        (r'\b(?:em|dia|no dia|na data|nesta|neste)\s+\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', lambda m: m.group(0).replace(re.match(r'\b(?:em|dia|no dia|na data|nesta|neste)\s+', m.group(0)).group(0), '')),  # em DD de mês
     ]
     
-    # ════════════════════════════════════════════════════════════
-    # ESTRATÉGIA 0: Procurar por "amanhã, DD" no texto original
-    # ════════════════════════════════════════════════════════════
-    pattern_amanha = r'\bamanhã\s*,?\s*(\d{1,2})\b'
-    match_amanha = re.search(pattern_amanha, texto_original, re.IGNORECASE)
+    for padrao, extrator in padroes_resumo:
+        for match in re.finditer(padrao, texto_modificado, re.IGNORECASE):
+            data_resumo = extrator(match)
+            if data_resumo not in datas_no_original:
+                print(f"⚠️ [REMOVER_DATAS_NAO_PRESENTES] Data '{data_resumo}' não está no original - removendo")
+                # Remover a data e preposições associadas (ex: "em 17 de setembro", "em 17 de setembro,")
+                padrão_com_preposicao = r'(?:\b(?:em|no|na|no dia|na data|dia)\b\s*)?' + re.escape(match.group(0)) + r'(?:,)?'
+                texto_modificado = re.sub(padrão_com_preposicao, '', texto_modificado, flags=re.IGNORECASE)
     
-    if match_amanha:
-        numero_amanha = match_amanha.group(1)
-        print(f"🔍 DEBUG corrigir_datas: Encontrado 'amanhã, {numero_amanha}'")
-        
-        # Procurar no resumo por "DD de [mês]" e substituir por "amanhã (DD)"
-        pattern_data_inventada = r'\b' + numero_amanha + r'\s+de\s+(?:' + '|'.join(meses) + r')\b'
-        match_data = re.search(pattern_data_inventada, texto_resumo, re.IGNORECASE)
-        
-        if match_data:
-            print(f"   ✓ Encontrado padrão de data inventada: '{match_data.group(0)}'")
-            # Substituir "DD de [mês]" por "amanhã (DD)"
-            texto_resumo = re.sub(pattern_data_inventada, f'amanhã ({numero_amanha})', texto_resumo, flags=re.IGNORECASE)
-            print(f"   → Corrigido para: 'amanhã ({numero_amanha})'")
-            return texto_resumo
-        else:
-            print(f"   ✗ Padrão de data inventada NÃO encontrado para {numero_amanha}")
+    # Limpeza final
+    texto_modificado = re.sub(r'\s{2,}', ' ', texto_modificado)
+    texto_modificado = re.sub(r'^\s*,\s*', '', texto_modificado)
+    texto_modificado = re.sub(r'\s+,\s*', ', ', texto_modificado)
+    texto_modificado = texto_modificado.strip()
     
-    # ════════════════════════════════════════════════════════════
-    # ESTRATÉGIA 1: Procurar no texto original por "dia_da_semana (DD)"
-    # ════════════════════════════════════════════════════════════
-    # Padrão: "(nesta|desta|na) sexta-feira (23)"
-    pattern_original = r'\b(?:nesta|desta|na|no)\s+(' + '|'.join(dias_semana) + r')\s*(?:-feira)?\s*\((\d{1,2})\)'
-    match_original = re.search(pattern_original, texto_original, re.IGNORECASE)
+    if texto_modificado != texto_resumo:
+        print(f"✅ [REMOVER_DATAS_NAO_PRESENTES] Datas não presentes removidas")
+        print(f"   Original: {texto_resumo}")
+        print(f"   Modificado: {texto_modificado}")
     
-    # DEBUG: Printar se encontrou ou não
-    print(f"🔍 DEBUG corrigir_datas: pattern_original encontrado? {match_original is not None}")
-    if match_original:
-        print(f"   → Match: '{match_original.group(0)}'")
-        print(f"   → Grupo 1 (dia): '{match_original.group(1)}'")
-        print(f"   → Grupo 2 (num): '{match_original.group(2)}'")
-    else:
-        print(f"   → Nenhum match encontrado no texto original")
-        print(f"   → Primeiros 200 chars do original: {texto_original[:200]}")
-    
-    if match_original:
-        dia_semana_original = match_original.group(1)
-        numero_original = match_original.group(2)
-        
-        # Garantir que tem "-feira" se não tiver
-        if 'segunda' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
-            dia_semana_original = 'segunda-feira'
-        elif 'terça' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
-            dia_semana_original = 'terça-feira'
-        elif 'quarta' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
-            dia_semana_original = 'quarta-feira'
-        elif 'quinta' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
-            dia_semana_original = 'quinta-feira'
-        elif 'sexta' in dia_semana_original.lower() and '-feira' not in dia_semana_original:
-            dia_semana_original = 'sexta-feira'
-        
-        print(f"   → Dia normalizado: '{dia_semana_original}', número: {numero_original}")
-        
-        # Procurar por qualquer padrão de data no resumo que mencione esse número
-        # e substituir por "nesta [dia] ([número])"
-        
-        # Padrão 1: "dia_da_semana, DD de [mês]"
-        pattern1 = r'\b(' + '|'.join(dias_semana) + r')\s*(?:-feira)?\s*,?\s*' + numero_original + r'\s+de\s+(?:' + '|'.join(meses) + r')\b'
-        match1 = re.search(pattern1, texto_resumo, re.IGNORECASE)
-        if match1:
-            print(f"   ✓ Pattern 1 encontrado: '{match1.group(0)}'")
-            texto_resumo = re.sub(pattern1, f'nesta {dia_semana_original} ({numero_original})', texto_resumo, flags=re.IGNORECASE)
-        else:
-            print(f"   ✗ Pattern 1 NÃO encontrado")
-        
-        # Padrão 2: "em DD de [mês]" (sem dia da semana)
-        pattern2 = r'\bem\s+' + numero_original + r'\s+de\s+(?:' + '|'.join(meses) + r')\b'
-        match2 = re.search(pattern2, texto_resumo, re.IGNORECASE)
-        if match2:
-            print(f"   ✓ Pattern 2 encontrado: '{match2.group(0)}'")
-            texto_resumo = re.sub(pattern2, f'nesta {dia_semana_original} ({numero_original})', texto_resumo, flags=re.IGNORECASE)
-        else:
-            print(f"   ✗ Pattern 2 NÃO encontrado")
-        
-        # Padrão 3: Apenas "DD de [mês]" (sem preposição)
-        pattern3 = r'\b' + numero_original + r'\s+de\s+(?:' + '|'.join(meses) + r')(?:\s+de\s+\d{4})?\b'
-        match3 = re.search(pattern3, texto_resumo, re.IGNORECASE)
-        if match3:
-            print(f"   ✓ Pattern 3 encontrado: '{match3.group(0)}'")
-            texto_resumo = re.sub(pattern3, f'nesta {dia_semana_original} ({numero_original})', texto_resumo, flags=re.IGNORECASE)
-        else:
-            print(f"   ✗ Pattern 3 NÃO encontrado")
-    
-    return texto_resumo
+    return texto_modificado
 
+
+def corrigir_datas_inventadas(texto_resumo, texto_original):
+    """Corrige ou remove datas inventadas no resumo, preservando referências de mês sem dia."""
+    if not texto_resumo:
+        return texto_resumo
+
+    meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+
+    # Extrair datas explícitas do texto original
+    datas_originais = set(re.findall(r'\b\d{1,2}/\d{1,2}/\d{4}\b', texto_original))
+    datas_originais.update(re.findall(r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', texto_original, flags=re.IGNORECASE))
+
+    # Extrair possíveis dias de mês referenciados como dia da semana (nesta quinta-feira (23))
+    dias_semana_orig = set(re.findall(r'\b(?:nesta|desta|na|no)\s+(?:segunda(?:-feira)?|terça(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sábado(?:-feira)?|domingo(?:-feira)?)\s*\((\d{1,2})\)', texto_original, flags=re.IGNORECASE))
+
+    texto_corrigido = texto_resumo
+
+    # Substituir data inventada com dia/mês (sem ano) por mês apenas quando não estiver presente no original
+    def _substituir_dia_mes(match):
+        data = match.group(0)
+        dia = match.group(1)
+        mes = match.group(2)
+        data_normalizada = f"{dia} de {mes}".lower()
+
+        if data_normalizada in (d.lower() for d in datas_originais):
+            return data  # manter se presente no original
+
+        if dia in dias_semana_orig:
+            # Se original tinha dia da semana com mesmo dia, manter formato de dia da semana preferido
+            return f"{mes}"
+
+        # Remover dia, mantendo referência mensal para conservar "em setembro"
+        return f"{mes}"
+
+    texto_corrigido = re.sub(r'\b(\d{1,2})\s+de\s+(' + meses + r')(?:\s+de\s+\d{4})?\b', _substituir_dia_mes, texto_corrigido, flags=re.IGNORECASE)
+
+    # Remover datas completas DD/MM/YYYY não presentes no original
+    def _remover_data_completa(match):
+        data = match.group(0)
+        if data in datas_originais:
+            return data
+        print(f"⚠️ [CORRIGIR_DATAS_INVENTADAS] Removendo data completa inventada: {data}")
+        return ''
+
+    texto_corrigido = re.sub(r'\b\d{1,2}/\d{1,2}/\d{4}\b', _remover_data_completa, texto_corrigido)
+
+    # Remover referências de dia da semana com dia sequencial desconhecido (ex: 'sexta-feira, 23 de setembro')
+    texto_corrigido = re.sub(r'\b(?:segunda(?:-feira)?|terça(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sábado(?:-feira)?|domingo(?:-feira)?)\s*,?\s*\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', '', texto_corrigido, flags=re.IGNORECASE)
+
+    # Limpeza de resíduos resultantes
+    texto_corrigido = re.sub(r'\s{2,}', ' ', texto_corrigido)
+    texto_corrigido = re.sub(r'^\s*,\s*', '', texto_corrigido)
+    texto_corrigido = re.sub(r'\s+,\s*', ', ', texto_corrigido)
+    texto_corrigido = texto_corrigido.strip()
+
+    if texto_corrigido != texto_resumo:
+        print(f"✅ [CORRIGIR_DATAS_INVENTADAS] Correções aplicadas")
+        print(f"   Original: {texto_resumo}")
+        print(f"   Modificado: {texto_corrigido}")
+
+    return texto_corrigido
 
 def processar_marcas_v2(arq_textos):
     """
@@ -586,8 +602,9 @@ INSTRUÇÕES IMPORTANTES:
 1. Relate apenas FATOS objetivos
 2. NÃO use adjetivos elogiosos
 3. PRESERVE O TEMPO VERBAL exatamente como aparece no texto original
-4. NÃO mencione datas específicas (nem passadas nem futuras) - descreva apenas os eventos
-5. Forneça APENAS o resumo, sem introduções
+4. NÃO mencione QUALQUER data, dia, mês ou ano - nem passadas nem futuras. Descreva apenas os eventos sem referências temporais específicas.
+5. Se o texto mencionar datas, ignore-as completamente no resumo
+6. Forneça APENAS o resumo, sem introduções ou metadados
 
 Texto:
 {texto}"""
@@ -939,12 +956,22 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
             try:
                 texto_final = remover_datas_passadas(texto_corrigido)
                 if not isinstance(texto_final, str):
-                    print(f"⚠️ AVISO: remover_datas_passadas retornou tipo {type(texto_final)}")
+                    print(f"[AVISO]: remover_datas_passadas retornou tipo {type(texto_final)}")
                     texto_final = str(texto_final)
             except Exception as e:
-                print(f"⚠️ ERRO em remover_datas_passadas: {e}")
+                print(f"[ERRO] em remover_datas_passadas: {e}")
                 texto_final = texto_corrigido
-            # =======================================================
+            
+            # ========== NOVA ETAPA: Remover datas não presentes no original ==========
+            try:
+                texto_final = remover_datas_nao_presentes_no_original(texto_final, corpo)
+                if not isinstance(texto_final, str):
+                    print(f"[AVISO]: remover_datas_nao_presentes_no_original retornou tipo {type(texto_final)}")
+                    texto_final = str(texto_final)
+            except Exception as e:
+                print(f"[ERRO] em remover_datas_nao_presentes_no_original: {e}")
+                texto_final = texto_final
+            # ======================================================================
             
             return texto_final
         except Exception as e:
@@ -1053,6 +1080,14 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
                 else:
                     print(f"  ✅ Verbo: '{primeiro_verbo}' ({tipo_esperado}) - CORRETO")
                 # ==========================================================================
+                
+                # ========== LIMPEZA FINAL: Remover QUALQUER menção a datas ==========
+                # Aplicar uma última passada agressiva para matar datas restantes
+                try:
+                    resumo_final = remover_datas_passadas(resumo_final)
+                except Exception as e:
+                    print(f"[AVISO] Limpeza final de datas falhou: {e}")
+                # ======================================================================
                 
                 resultados.append({
                     "Marca": marca,

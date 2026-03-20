@@ -226,6 +226,124 @@ Sua resposta deve ser **SOMENTE** a nova classificação. Não inclua nenhuma ex
 
 # ================= FIM NOVA FUNÇÃO =================
 
+
+def remover_datas_passadas(texto_resumo):
+    if not texto_resumo:
+        return texto_resumo
+
+    meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+    dias_semana = r'(?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:-feira)?'
+
+    # proteger datas futuras
+    texto_modificado = re.sub(
+        r'\b(previsto para|prevista para|programado para|deve ocorrer em|ocorrerá em|acontecerá em|será em|será no dia|marcado para|agendado para)\s+(\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?)',
+        r'__PROTEGER_DATA__\1 \2__FIM_PROTECAO__',
+        texto_resumo,
+        flags=re.IGNORECASE
+    )
+
+    texto_modificado = re.sub(
+        r'\b(no próximo|na próxima|próximo|próxima)\s+(dia|'+dias_semana+r')?\s*(\d{1,2}(?:\s+de\s+'+meses+r'(?:\s+de\s+\d{4})?)?)',
+        r'__PROTEGER_DATA__\1 \2 \3__FIM_PROTECAO__',
+        texto_modificado,
+        flags=re.IGNORECASE
+    )
+
+    verbos_passado = r'(?:anunciou|informou|divulgou|publicou|comunicou|reportou|declarou|afirmou|revelou|confirmou|lançou|apresentou|mostrou|indicou|condenou|condenaram|pautou|pautaram|decidiu|decidiram|aprovou|aprovaram|realizou|realizaram|registrou|registraram|assinou|assinaram|entregou|entregaram|enviou|enviaram|recebeu|receberam|aceitou|aceitaram|rejeitou|rejeitaram|negou|negaram|admitiu|admitiram|reconheceu|reconheceram|criticou|criticaram|acusou|acusaram|denunciou|denunciaram|investigou|investigaram|descobriu|descobriram|encontrou|encontraram|identificou|identificaram|descartou|descartaram)'
+
+    padrao_verbo_data = r'\b(' + verbos_passado + r')\s*,?\s*(?:em\s+|no\s+|na\s+|dia\s+|nesta\s+|desta\s+|naquele\s+|daquele\s+|nessa\s+|desse\s+|naquela\s+|daquela\s+)?\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\s*,?'
+    texto_modificado = re.sub(padrao_verbo_data, r'\1', texto_modificado, flags=re.IGNORECASE)
+
+    padrao_data_extenso = r'\b(?:em|dia|no dia|na data|nesta|nesta data|neste dia)\s+\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b'
+    texto_modificado = re.sub(padrao_data_extenso, '', texto_modificado, flags=re.IGNORECASE)
+
+    padrao_dia_semana = r'\b(?:nesta|neste|na|no|desta|deste|da|do|última|último)\s+' + dias_semana + r'\s*\(\d{1,2}\)'
+    texto_modificado = re.sub(padrao_dia_semana, '', texto_modificado, flags=re.IGNORECASE)
+
+    texto_modificado = re.sub(r'\s{2,}', ' ', texto_modificado)
+    texto_modificado = re.sub(r'^\s*,\s*', '', texto_modificado)
+    texto_modificado = re.sub(r'\s+,', ',', texto_modificado)
+    texto_modificado = re.sub(r',\s*,', ',', texto_modificado)
+    texto_modificado = re.sub(r'__PROTEGER_DATA__', '', texto_modificado)
+    texto_modificado = re.sub(r'__FIM_PROTECAO__', '', texto_modificado)
+
+    return texto_modificado.strip()
+
+
+def remover_datas_nao_presentes_no_original(texto_resumo, texto_original):
+    if not texto_resumo or not texto_original:
+        return texto_resumo
+
+    meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+    padroes_original = [
+        r'\b\d{1,2}/\d{1,2}/\d{4}\b',
+        r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b',
+        r'\b(?:nesta|desta|na|no)\s+(?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:-feira)?\s*\(\d{1,2}\)\b',
+        r'\bamanhã\s*,?\s*\d{1,2}\b'
+    ]
+
+    datas_no_original = set()
+    for padrao in padroes_original:
+        matches = re.findall(padrao, texto_original, re.IGNORECASE)
+        datas_no_original.update(matches)
+
+    texto_modificado = texto_resumo
+    padroes_resumo = [
+        (r'\b\d{1,2}/\d{1,2}/\d{4}\b', lambda m: m.group(0)),
+        (r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', lambda m: m.group(0)),
+        (r'\b(?:em|dia|no dia|na data|nesta|neste)\s+\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', lambda m: re.sub(r'^\b(?:em|dia|no dia|na data|nesta|neste)\s+', '', m.group(0), flags=re.IGNORECASE))
+    ]
+
+    for padrao, extrator in padroes_resumo:
+        for match in re.finditer(padrao, texto_modificado, re.IGNORECASE):
+            data_resumo = extrator(match)
+            if data_resumo not in datas_no_original:
+                texto_modificado = re.sub(r'(?:\b(?:em|no|na|no dia|na data|dia)\b\s*)?' + re.escape(match.group(0)) + r'(?:,)?', '', texto_modificado, flags=re.IGNORECASE)
+
+    texto_modificado = re.sub(r'\s{2,}', ' ', texto_modificado)
+    texto_modificado = re.sub(r'^\s*,\s*', '', texto_modificado)
+    texto_modificado = re.sub(r'\s+,\s*', ', ', texto_modificado)
+
+    return texto_modificado.strip()
+
+
+def corrigir_datas_inventadas(texto_resumo, texto_original):
+    if not texto_resumo:
+        return texto_resumo
+
+    meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+
+    datas_originais = set(re.findall(r'\b\d{1,2}/\d{1,2}/\d{4}\b', texto_original))
+    datas_originais.update(re.findall(r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', texto_original, re.IGNORECASE))
+    dias_semana_orig = set(re.findall(r'\b(?:nesta|desta|na|no)\s+(?:segunda(?:-feira)?|terça(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sábado(?:-feira)?|domingo(?:-feira)?)\s*\((\d{1,2})\)', texto_original, re.IGNORECASE))
+
+    texto_corrigido = texto_resumo
+
+    def _substituir_dia_mes(match):
+        dia = match.group(1)
+        mes = match.group(2)
+        if f"{dia} de {mes}".lower() in (d.lower() for d in datas_originais):
+            return match.group(0)
+        if dia in dias_semana_orig:
+            return f"{mes}"
+        return f"{mes}"
+
+    texto_corrigido = re.sub(r'\b(\d{1,2})\s+de\s+(' + meses + r')(?:\s+de\s+\d{4})?\b', _substituir_dia_mes, texto_corrigido, flags=re.IGNORECASE)
+
+    def _remover_data_completa(match):
+        data = match.group(0)
+        return data if data in datas_originais else ''
+
+    texto_corrigido = re.sub(r'\b\d{1,2}/\d{1,2}/\d{4}\b', _remover_data_completa, texto_corrigido)
+
+    texto_corrigido = re.sub(r'\b(?:segunda(?:-feira)?|terça(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sábado(?:-feira)?|domingo(?:-feira)?)\s*,?\s*\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', '', texto_corrigido, flags=re.IGNORECASE)
+    texto_corrigido = re.sub(r'\s{2,}', ' ', texto_corrigido)
+    texto_corrigido = re.sub(r'^\s*,\s*', '', texto_corrigido)
+    texto_corrigido = re.sub(r'\s+,\s*', ', ', texto_corrigido)
+
+    return texto_corrigido.strip()
+
+
 # Função gerar_resumos_setor com proteções adicionais
 
 def gerar_resumos_setor(df):
@@ -339,8 +457,15 @@ def gerar_resumos_setor(df):
                 
                 # Verificar se o resultado não está vazio
                 if resultado and resultado.strip():
-                    # Aplicar limpeza de frases introdutórias antes de retornar
-                    return limpar_frases_introdutorias(resultado)
+                    # Aplicar limpeza de frases introdutórias antes de seguir
+                    texto = limpar_frases_introdutorias(resultado)
+
+                    # Aplicar correções de datas: remover inventadas, remover passadas, validar original
+                    texto = corrigir_datas_inventadas(texto, prompt_completo)
+                    texto = remover_datas_passadas(texto)
+                    texto = remover_datas_nao_presentes_no_original(texto, prompt_completo)
+
+                    return texto.strip()
                 else:
                     print(f"⚠️ Resposta vazia na tentativa {tentativa + 1}")
                     

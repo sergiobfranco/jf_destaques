@@ -308,40 +308,65 @@ def remover_datas_nao_presentes_no_original(texto_resumo, texto_original):
 
 
 def corrigir_datas_inventadas(texto_resumo, texto_original):
+    """Corrige ou remove datas inventadas no resumo, preservando referências de mês sem dia."""
     if not texto_resumo:
         return texto_resumo
 
     meses = r'(?:janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
 
+    # Extrair datas explícitas do texto original
     datas_originais = set(re.findall(r'\b\d{1,2}/\d{1,2}/\d{4}\b', texto_original))
-    datas_originais.update(re.findall(r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', texto_original, re.IGNORECASE))
-    dias_semana_orig = set(re.findall(r'\b(?:nesta|desta|na|no)\s+(?:segunda(?:-feira)?|terça(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sábado(?:-feira)?|domingo(?:-feira)?)\s*\((\d{1,2})\)', texto_original, re.IGNORECASE))
+    datas_originais.update(re.findall(r'\b\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', texto_original, flags=re.IGNORECASE))
+
+    # Extrair possíveis dias de mês referenciados como dia da semana (nesta quinta-feira (23))
+    dias_semana_orig = set(re.findall(r'\b(?:nesta|desta|na|no)\s+(?:segunda(?:-feira)?|terça(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sábado(?:-feira)?|domingo(?:-feira)?)\s*\((\d{1,2})\)', texto_original, flags=re.IGNORECASE))
 
     texto_corrigido = texto_resumo
 
+    # Substituir data inventada com dia/mês (sem ano) por mês apenas quando não estiver presente no original
     def _substituir_dia_mes(match):
+        data = match.group(0)
         dia = match.group(1)
         mes = match.group(2)
-        if f"{dia} de {mes}".lower() in (d.lower() for d in datas_originais):
-            return match.group(0)
+        data_normalizada = f"{dia} de {mes}".lower()
+
+        if data_normalizada in (d.lower() for d in datas_originais):
+            return data  # manter se presente no original
+
         if dia in dias_semana_orig:
+            # Se original tinha dia da semana com mesmo dia, manter formato de dia da semana preferido
             return f"{mes}"
+
+        # Remover dia, mantendo referência mensal para conservar "em setembro"
         return f"{mes}"
 
     texto_corrigido = re.sub(r'\b(\d{1,2})\s+de\s+(' + meses + r')(?:\s+de\s+\d{4})?\b', _substituir_dia_mes, texto_corrigido, flags=re.IGNORECASE)
 
+    # Remover datas completas DD/MM/YYYY não presentes no original
     def _remover_data_completa(match):
         data = match.group(0)
-        return data if data in datas_originais else ''
+        if data in datas_originais:
+            return data
+        print(f"⚠️ [CORRIGIR_DATAS_INVENTADAS] Removendo data completa inventada: {data}")
+        return ''
 
     texto_corrigido = re.sub(r'\b\d{1,2}/\d{1,2}/\d{4}\b', _remover_data_completa, texto_corrigido)
 
+    # Remover referências de dia da semana com dia sequencial desconhecido (ex: 'sexta-feira, 23 de setembro')
     texto_corrigido = re.sub(r'\b(?:segunda(?:-feira)?|terça(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sábado(?:-feira)?|domingo(?:-feira)?)\s*,?\s*\d{1,2}\s+de\s+' + meses + r'(?:\s+de\s+\d{4})?\b', '', texto_corrigido, flags=re.IGNORECASE)
+
+    # Limpeza de resíduos resultantes
     texto_corrigido = re.sub(r'\s{2,}', ' ', texto_corrigido)
     texto_corrigido = re.sub(r'^\s*,\s*', '', texto_corrigido)
     texto_corrigido = re.sub(r'\s+,\s*', ', ', texto_corrigido)
+    texto_corrigido = texto_corrigido.strip()
 
-    return texto_corrigido.strip()
+    if texto_corrigido != texto_resumo:
+        print(f"✅ [CORRIGIR_DATAS_INVENTADAS] Correções aplicadas")
+        print(f"   Original: {texto_resumo}")
+        print(f"   Modificado: {texto_corrigido}")
+
+    return texto_corrigido
 
 
 # Função gerar_resumos_setor com proteções adicionais
@@ -399,9 +424,24 @@ def gerar_resumos_setor(df):
    - Mantenha tom jornalístico neutro e factual
    - Se há críticas ou problemas, relate-os objetivamente sem suavizar
 
-3. FOCO EM FATOS:
+3. TRATAMENTO DE DATAS - REGRA CRÍTICA:
+   - Para eventos JÁ OCORRIDOS (verbos no passado): NÃO mencione datas específicas
+   - Para eventos FUTUROS (verbos no futuro): MANTENHA as datas
+   
+   Exemplos de REMOÇÃO (passado):
+   ❌ "anunciou em 29/01/2026" → ✅ "anunciou"
+   ❌ "afirmou em 29 de janeiro" → ✅ "afirmou"
+   ❌ "informou nesta quinta-feira (29)" → ✅ "informou"
+   ❌ "o banco lançou em 29 de janeiro" → ✅ "o banco lançou"
+   
+   Exemplos de MANUTENÇÃO (futuro):
+   ✅ "previsto para 10 de fevereiro" → MANTER
+   ✅ "deve ocorrer em 11 de fevereiro" → MANTER
+   ✅ "a estreia acontecerá em 11 de fevereiro" → MANTER
+
+4. FOCO EM FATOS:
    - O que aconteceu (ações concretas)
-   - Quando aconteceu (datas, períodos)
+   - Quando aconteceu (datas, períodos) - MAS APENAS SE PRESENTE NO TEXTO ORIGINAL
    - Dados numéricos e estatísticos
    - Anúncios, eventos específicos
    - Resultados mensuráveis
@@ -413,7 +453,7 @@ def gerar_resumos_setor(df):
             "messages": [
                 {
                     "role": "system", 
-                    "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é relatar fatos objetivamente sobre qualquer tema ou setor, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra, direta e imparcial."
+                    "content": "Você é um analista de notícias que produz resumos estritamente factuais e neutros. Você NÃO é um profissional de marketing ou relações públicas. Seu trabalho é relatar fatos objetivamente sobre qualquer tema ou setor, sem elogios, sem tom promocional, sem juízos de valor. Use linguagem jornalística neutra, direta e imparcial. IMPORTANTE: Para eventos passados, NÃO mencione datas específicas. Para eventos futuros, MANTENHA as datas."
                 },
                 {
                     "role": "user", 

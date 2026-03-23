@@ -300,6 +300,26 @@ def converter_urls_docx_para_hyperlinks(arquivo_entrada, pasta_destino='/app/out
     print(f"   - URLs convertidas em hyperlinks: {total_urls_convertidas}")
     print(f"Arquivo salvo localmente: {arquivo_saida}")
 
+    # ── NOVO: Verificação CHK de marcas ─────────────────────────────────────
+    print(f"\n{'─'*55}")
+    print(f"  Iniciando etapa de verificação CHK de marcas...")
+    print(f"{'─'*55}")
+    try:
+        from verificador_marcas_chk import processar_verificacao_chk
+        processar_verificacao_chk(arquivo_saida)
+    except ImportError:
+        print("  ⚠️  Módulo 'verificador_marcas_chk' não encontrado. "
+              "Etapa CHK ignorada.")
+        print("     Certifique-se de que verificador_marcas_chk.py está "
+              "na mesma pasta que relatorio_ajustado_final.py.")
+    except Exception as e:
+        print(f"  ⚠️  Erro durante a verificação CHK: {e}")
+        print("       O relatório principal foi salvo normalmente. "
+              "Somente o CHK foi afetado.")
+        import traceback
+        traceback.print_exc()
+    # ── FIM Verificação CHK ──────────────────────────────────────────────────
+
     # 6 Upload para Google Drive, se configurado
     if pasta_id_drive:
         try:

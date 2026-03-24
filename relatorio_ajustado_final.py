@@ -306,7 +306,11 @@ def converter_urls_docx_para_hyperlinks(arquivo_entrada, pasta_destino='/app/out
     print(f"{'─'*55}")
     try:
         from verificador_marcas_chk import processar_verificacao_chk
-        processar_verificacao_chk(arquivo_saida)
+        processar_verificacao_chk(
+            arquivo_saida,
+            pasta_id_drive=pasta_id_drive,   # mesmo ID usado para o arquivo principal
+            pasta_destino=pasta_destino       # mesmo volume Docker mapeado para a rede
+        )
     except ImportError:
         print("  ⚠️  Módulo 'verificador_marcas_chk' não encontrado. "
               "Etapa CHK ignorada.")

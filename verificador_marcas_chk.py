@@ -304,7 +304,7 @@ def gerar_docx_chk(arquivo_saida_chk, conteudo_processado):
 
             # Manchete do parágrafo (bold, destaque)
             p_manchete = doc.add_paragraph()
-            run_manchete = p_manchete.add_run(f"📌 {manchete}")
+            run_manchete = p_manchete.add_run(manchete)
             run_manchete.bold = True
             run_manchete.font.size = Pt(11)
             run_manchete.font.color.rgb = RGBColor(30, 30, 30)
@@ -324,22 +324,53 @@ def gerar_docx_chk(arquivo_saida_chk, conteudo_processado):
             # Separador entre blocos
             doc.add_paragraph("")
 
-        elif tipo == 'paragrafo_sem_marca':
-            # Parágrafo sem marcas monitoradas — incluído em itálico para referência
-            p = doc.add_paragraph()
-            run = p.add_run(f"[sem marcas] {texto[:120]}{'...' if len(texto) > 120 else ''}")
-            run.italic = True
-            run.font.size = Pt(9)
-            run.font.color.rgb = RGBColor(150, 150, 150)
-
     doc.save(arquivo_saida_chk)
+
+
+# ==============================================================================
+# UPLOAD GOOGLE DRIVE (fallback autônomo, caso import de relatorio_ajustado_final falhe)
+# ==============================================================================
+
+def _upload_chk_drive(caminho_arquivo, pasta_id):
+    """
+    Upload do arquivo CHK para o Google Drive via Service Account.
+    Espelho da função upload_para_google_drive do relatorio_ajustado_final.py.
+    Usado como fallback caso o import direto não esteja disponível.
+    """
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    SERVICE_ACCOUNT_FILE = 'service_account.json'
+    SCOPES = ['https://www.googleapis.com/auth/drive']
+
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    )
+    service = build('drive', 'v3', credentials=creds)
+
+    file_metadata = {
+        'name': os.path.basename(caminho_arquivo),
+        'parents': [pasta_id]
+    }
+    media = MediaFileUpload(
+        caminho_arquivo,
+        mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
+    uploaded = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
+    print(f"  Upload CHK concluído com ID: {uploaded.get('id')}")
 
 
 # ==============================================================================
 # FUNÇÃO PRINCIPAL DE PROCESSAMENTO
 # ==============================================================================
 
-def processar_verificacao_chk(arquivo_docx):
+def processar_verificacao_chk(arquivo_docx, pasta_id_drive=None, pasta_destino='/app/output'):
     """
     Ponto de entrada principal.
 
@@ -348,6 +379,9 @@ def processar_verificacao_chk(arquivo_docx):
 
     Args:
         arquivo_docx (str): Caminho do arquivo DOCX gerado pelo relatorio_ajustado_final.py
+        pasta_id_drive (str|None): ID da pasta no Google Drive para upload do CHK.
+                                   Deve ser o mesmo usado para o arquivo principal.
+        pasta_destino (str): Caminho local de destino (volume Docker mapeado para a rede).
 
     Returns:
         bool: True se processamento concluído com sucesso, False caso contrário.
@@ -423,21 +457,27 @@ def processar_verificacao_chk(arquivo_docx):
         if not texto:
             continue
 
-        # Verificar se é título de seção relevante
+        # Verificar se o parágrafo é um título de seção (padrão "--- ... ---")
+        eh_titulo_secao = bool(re.match(r'^---\s*.+\s*---\s*$', texto))
         eh_secao_relevante = any(sec in texto for sec in SECOES_RELEVANTES)
 
-        if eh_secao_relevante:
-            antes_da_primeira_secao = False
-            for sec in SECOES_RELEVANTES:
-                if sec in texto:
-                    secao_atual = sec
-                    break
-            conteudo_processado.append({
-                'tipo': 'secao',
-                'texto': texto,
-                'dados': None
-            })
-            print(f"  📌 Seção encontrada: {secao_atual}")
+        if eh_titulo_secao:
+            if eh_secao_relevante:
+                antes_da_primeira_secao = False
+                for sec in SECOES_RELEVANTES:
+                    if sec in texto:
+                        secao_atual = sec
+                        break
+                conteudo_processado.append({
+                    'tipo': 'secao',
+                    'texto': texto,
+                    'dados': None
+                })
+                print(f"  📌 Seção relevante encontrada: {secao_atual}")
+            else:
+                # Seção não monitorada — desativa o processamento de parágrafos
+                print(f"  ⏭️  Seção ignorada: {texto}")
+                secao_atual = None
             continue
 
         # Capturar linhas de cabeçalho (antes da primeira seção relevante)
@@ -469,11 +509,7 @@ def processar_verificacao_chk(arquivo_docx):
                       f"{len(marcas)} marca(s) → {', '.join(marcas)}")
             else:
                 total_paragrafos_sem_marca += 1
-                conteudo_processado.append({
-                    'tipo': 'paragrafo_sem_marca',
-                    'texto': texto,
-                    'dados': None
-                })
+                # Parágrafos sem marcas monitoradas são ignorados no relatório CHK
 
     print(f"\n  📊 Varredura concluída:")
     print(f"     Parágrafos COM marcas  : {total_paragrafos_com_marca}")
@@ -555,6 +591,46 @@ def processar_verificacao_chk(arquivo_docx):
         print(f"  ❌ Arquivo CHK não encontrado após tentativa de gravação.")
         print(f"{separador}\n")
         return False
+
+    # ------------------------------------------------------------------
+    # 8. Upload do CHK para o Google Drive (mesma pasta do arquivo principal)
+    # ------------------------------------------------------------------
+    if pasta_id_drive:
+        print(f"\n  ☁️  Fazendo upload do CHK para o Google Drive...")
+        try:
+            from relatorio_ajustado_final import upload_para_google_drive
+            upload_para_google_drive(arquivo_chk, os.path.basename(arquivo_chk), pasta_id_drive)
+            print(f"  ✅ Upload do CHK concluído.")
+        except ImportError:
+            # Fallback: reimplementar o upload diretamente aqui
+            print(f"  ⚠️  Não foi possível importar upload_para_google_drive. "
+                  f"Tentando upload direto...")
+            try:
+                _upload_chk_drive(arquivo_chk, pasta_id_drive)
+                print(f"  ✅ Upload do CHK concluído (via fallback).")
+            except Exception as e:
+                print(f"  ⚠️  Upload do CHK falhou: {e}. "
+                      f"O arquivo foi salvo localmente mas pode não aparecer no Drive.")
+        except Exception as e:
+            print(f"  ⚠️  Erro no upload do CHK: {e}. "
+                  f"O arquivo foi salvo localmente mas pode não aparecer no Drive.")
+    else:
+        print(f"  ℹ️  pasta_id_drive não informado — upload do CHK ignorado.")
+
+    # ------------------------------------------------------------------
+    # 9. Cópia para pasta de rede local (volume Docker)
+    # ------------------------------------------------------------------
+    if os.path.isdir(pasta_destino):
+        import shutil
+        destino_chk = os.path.join(pasta_destino, os.path.basename(arquivo_chk))
+        try:
+            if not (os.path.exists(destino_chk) and os.path.samefile(arquivo_chk, destino_chk)):
+                shutil.copy2(arquivo_chk, destino_chk)
+                print(f"  ✅ CHK também copiado para pasta de rede: {destino_chk}")
+            else:
+                print(f"  ℹ️  CHK já está na pasta de destino (mesmo arquivo).")
+        except Exception as e:
+            print(f"  ⚠️  Erro ao copiar CHK para pasta de rede: {e}")
 
     print(f"\n{separador}")
     print(f"  ✅  VERIFICAÇÃO CHK CONCLUÍDA")

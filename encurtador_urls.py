@@ -141,68 +141,63 @@ def encurtar_url_seguro(url_original, max_tentativas_por_servico=2, delay=1):
     """
     Encurta URL com fallback automático entre múltiplos serviços
     
-    ORDEM DE PRIORIDADE (SEM TELA INTERMEDIÁRIA):
-    1. clck.ru   → Redirecionamento direto, rápido, ilimitado ✅
-    2. da.gd     → Redirecionamento direto, estável, ilimitado ✅
-    3. is.gd     → Redirecionamento direto, lento mas confiável ✅
-    4. v.gd      → TEM TELA DE AVISO (último recurso) ⚠️
-    5. ulvis.net → Limite de ~500 URLs/dia
+    ORDEM OTIMIZADA COM DELAY PARA JANELA DESLIZANTE:
+    1. da.gd     → Principal (limite: 60 URLs/minuto em janela deslizante)
+    2. is.gd     → Fallback confiável
+    3. clck.ru   → Fallback para URLs curtas
     
-    Args:
-        url_original: URL para encurtar
-        max_tentativas_por_servico: Tentativas por serviço (padrão: 2)
-        delay: Segundos entre tentativas (padrão: 1)
-    
-    Returns:
-        URL encurtada ou URL original se todos falharem
+    Delay de 1.0s entre URLs garante ~60 URLs/minuto (dentro do limite)
     """
+    import time
     
-    # Validação inicial
-    url_valida, msg_validacao = validar_url(url_original)
-    if not url_valida:
-        print(f"⚠️  Validação falhou: {msg_validacao}")
+    # Validação básica
+    if not url_original or pd.isna(url_original) or str(url_original).strip() == '':
         return str(url_original) if url_original else "URL não disponível"
     
     url_str = str(url_original).strip()
     
-    # Lista de serviços em ordem de preferência
-    # NOVA ORDEM: Serviços SEM tela intermediária primeiro
+    if not url_str.startswith(('http://', 'https://')):
+        return url_str
+    
+    # Ordem de serviços
     servicos = [
-        ("da.gd", encurtar_com_dagd),         # 1º - Aceita URLs longas, sem tela ✅
-        ("is.gd", encurtar_com_isgd),         # 2º - Backup confiável
-        ("clck.ru", encurtar_com_clckru),     # 3º - Para URLs curtas
-        ("v.gd", encurtar_com_vgd),           # 4º - TEM TELA DE AVISO
-        ("ulvis.net", encurtar_com_ulvis),    # 5º - Limite diário
+        ("da.gd", encurtar_com_dagd),      # Principal
+        ("is.gd", encurtar_com_isgd),      # Fallback
+        ("clck.ru", encurtar_com_clckru),  # Fallback 2
     ]
     
-    print(f"🔗 Encurtando: {url_str[:60]}...")
-    
-    # Tentar cada serviço
     for nome_servico, funcao_servico in servicos:
-        for tentativa in range(max_tentativas_por_servico):
+        print(f"   {nome_servico}", end=" ", flush=True)
+        
+        for tentativa in range(1, max_tentativas_por_servico + 1):
+            print(f"(tent {tentativa})...", end=" ", flush=True)
+            
             try:
-                print(f"   {nome_servico} (tent {tentativa + 1})...", end=" ")
-                
                 resultado, info = funcao_servico(url_str)
                 
                 if resultado:
-                    print(f"✅")
+                    print("✅")
+                    
+                    # ========================================================
+                    # DELAY ANTI-RATE-LIMIT (JANELA DESLIZANTE)
+                    # ========================================================
+                    # da.gd: 60 URLs/minuto em janela deslizante
+                    # 1.1s = margem de segurança (latência de rede)
+                    time.sleep(1.5)  # Aumentado de 1.0s para 1.1s
+                    
                     return resultado
                 else:
-                    print(f"❌ {info[:30]}")
-                    
-            except Exception as e:
-                print(f"❌ {str(e)[:30]}")
+                    print(f"❌ {nome_servico} retornou: {info}")
             
-            # Aguardar antes da próxima tentativa
-            if tentativa < max_tentativas_por_servico - 1:
+            except Exception as e:
+                print(f"❌ Erro: {str(e)[:50]}")
+            
+            if tentativa < max_tentativas_por_servico:
                 time.sleep(delay)
         
-        # Pequena pausa entre serviços diferentes
-        time.sleep(0.3)
+        print()
     
-    # Se todos falharam, retornar URL original
-    print(f"⚠️  Todos falharam. Usando URL original.")
+    print(f"⚠️ Todos os serviços falharam. Usando URL original.")
     return url_str
 
 

@@ -6,18 +6,12 @@ import traceback
 
 from dotenv import load_dotenv
 
-def obter_chave_deepseek():
-    # Caminho absoluto do .env com base no local do script
-    #base_dir = os.path.dirname(os.path.abspath(__file__))
-    #env_path = os.path.join(base_dir, ".env")
-    #load_dotenv(env_path)
-
+def obter_chave_llm():
+    """Obtém a chave de API do arquivo .env (mantida por compatibilidade de estrutura).
+    O endpoint Qwen aceita qualquer valor como chave."""
     load_dotenv()
 
-    # Caminho correto para o config_usuario.ini em dados/config/
     config_path = os.path.join("dados", "config", "config_usuario.ini")
-
-    # Debug opcional
     print(f"🛠️ Lendo config de: {config_path}")
 
     config = configparser.ConfigParser()
@@ -27,19 +21,14 @@ def obter_chave_deepseek():
     env_var = f"DEEPSEEK_API_KEY_{perfil.upper()}"
     chave = os.getenv(env_var)
 
-    # Diagnóstico
     print(f"Perfil de usuário: {perfil}")
     print(f"Variável de ambiente esperada: {env_var}")
-    print(f"Chave encontrada: {chave[:10]}..." if chave else "❌ Nenhuma chave encontrada")
-    # Diagnóstico adicional opcional
-    # traceback.print_stack(limit=2)
+    print(f"Chave encontrada: {chave[:10]}..." if chave else "⚠️ Nenhuma chave encontrada (usando placeholder)")
 
-    if not chave:
-        raise ValueError(f"Chave de API não encontrada para o perfil '{perfil}' ({env_var}) no arquivo .env")
-    
-    return chave
+    # Qwen local não exige chave válida; usa placeholder se não encontrada
+    return chave or "placeholder-key"
 
-from config import DEEPSEEK_API_URL
+from config import QWEN_API_URL
 
 def avaliar_relevancia(df):
     PROMPT_CHARACTER_LIMIT = 30000
@@ -48,7 +37,7 @@ def avaliar_relevancia(df):
     #darq_relevancia_irrelevantes = 'api/Favoritos_Marcas_Irrelevantes.xlsx' # Esta variável não será mais usada para salvar o arquivo
     #arq_prompts = 'marca_setor/Prompts_Resumo_Noticias_DBSCAN.xlsx'
 
-    api_key = obter_chave_deepseek()
+    api_key = obter_chave_llm()
 
     HEADERS = {
         "Content-Type": "application/json",
@@ -71,7 +60,7 @@ def avaliar_relevancia(df):
         )
 
         data = {
-            "model": "deepseek-chat",
+            "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -80,11 +69,11 @@ def avaliar_relevancia(df):
         }
 
         try:
-            print(f"Enviando requisição ao DeepSeek para avaliar a marca '{marca}'...")
-            response = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data)
+            print(f"Enviando requisição ao Qwen para avaliar a marca '{marca}'...")
+            response = requests.post(QWEN_API_URL, headers=HEADERS, json=data)
             response.raise_for_status()
             resposta = response.json()["choices"][0]["message"]["content"].strip()
-            print(f"Resposta do DeepSeek: {resposta}")
+            print(f"Resposta do Qwen: {resposta}")
             return resposta.lower().startswith("true")
         except Exception as e:
             print(f"Erro ao avaliar relevância: {e}")

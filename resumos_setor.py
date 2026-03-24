@@ -1,4 +1,5 @@
-# Rotina para gerar os resumos de Setor pelo DeepSeek
+# Rotina para gerar os resumos de Setor pelo Qwen (Qwen/Qwen3.5-35B-A3B-GPTQ-Int4)
+# Migrado de DeepSeek para Qwen
 
 import pandas as pd
 import requests
@@ -10,18 +11,12 @@ import re
 
 from dotenv import load_dotenv
 
-def obter_chave_deepseek():
-    # Caminho absoluto do .env com base no local do script
-    #base_dir = os.path.dirname(os.path.abspath(__file__))
-    #env_path = os.path.join(base_dir, ".env")
-    #load_dotenv(env_path)
-
+def obter_chave_llm():
+    """Obtém a chave de API do arquivo .env (mantida por compatibilidade de estrutura).
+    O endpoint Qwen aceita qualquer valor como chave."""
     load_dotenv()
 
-    # Caminho correto para o config_usuario.ini em dados/config/
     config_path = os.path.join("dados", "config", "config_usuario.ini")
-
-    # Debug opcional
     print(f"🛠️ Lendo config de: {config_path}")
 
     config = configparser.ConfigParser()
@@ -31,19 +26,14 @@ def obter_chave_deepseek():
     env_var = f"DEEPSEEK_API_KEY_{perfil.upper()}"
     chave = os.getenv(env_var)
 
-    # Diagnóstico
     print(f"Perfil de usuário: {perfil}")
     print(f"Variável de ambiente esperada: {env_var}")
-    print(f"Chave encontrada: {chave[:10]}..." if chave else "❌ Nenhuma chave encontrada")
-    # Diagnóstico adicional opcional
-    # traceback.print_stack(limit=2)
+    print(f"Chave encontrada: {chave[:10]}..." if chave else "⚠️ Nenhuma chave encontrada (usando placeholder)")
 
-    if not chave:
-        raise ValueError(f"Chave de API não encontrada para o perfil '{perfil}' ({env_var}) no arquivo .env")
-    
-    return chave
+    # Qwen local não exige chave válida; usa placeholder se não encontrada
+    return chave or "placeholder-key"
 
-from config import DEEPSEEK_API_URL, w_marcas
+from config import QWEN_API_URL, w_marcas
 
 # ================= NOVA FUNÇÃO: PRÉ-PROCESSAMENTO BOLSONARO =================
 def reclassificar_noticias_bolsonaro(df):
@@ -51,7 +41,7 @@ def reclassificar_noticias_bolsonaro(df):
     Pré-processa notícias classificadas como POLÍTICA para verificar se tratam
     da condenação/prisão do ex-presidente Bolsonaro. Se sim, reclassifica para JUSTIÇA.
     """
-    api_key = obter_chave_deepseek()
+    api_key = obter_chave_llm()
     
     HEADERS = {
         "Authorization": f"Bearer {api_key}",
@@ -109,7 +99,7 @@ Sua resposta deve ser **SOMENTE** a nova classificação. Não inclua nenhuma ex
         return prompt_str.strip()
     
     def analisar_noticia(noticia_text, row_id=""):
-        """Envia notícia para análise do DeepSeek e retorna a classificação"""
+        """Envia notícia para análise do Qwen e retorna a classificação"""
         if not noticia_text or len(noticia_text) < 50:
             print(f"⚠️ Notícia muito curta ou vazia (ID: {row_id}), mantendo POLÍTICA")
             return "POLÍTICA"
@@ -117,7 +107,7 @@ Sua resposta deve ser **SOMENTE** a nova classificação. Não inclua nenhuma ex
         prompt_completo = PROMPT_ANALISE.replace("{NOTICIA}", noticia_text)
         
         payload = {
-            "model": "deepseek-chat",
+            "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
             "messages": [
                 {"role": "system", "content": "Você é um especialista em classificação de notícias jurídicas e políticas."},
                 {"role": "user", "content": prompt_completo}
@@ -129,7 +119,7 @@ Sua resposta deve ser **SOMENTE** a nova classificação. Não inclua nenhuma ex
         for tentativa in range(3):
             try:
                 print(f"🔍 Analisando notícia (ID: {row_id}) - Tentativa {tentativa + 1}")
-                response = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=payload, timeout=60)
+                response = requests.post(QWEN_API_URL, headers=HEADERS, json=payload, timeout=60)
                 response.raise_for_status()
                 resultado = response.json()['choices'][0]['message']['content'].strip().upper()
                 
@@ -372,7 +362,7 @@ def corrigir_datas_inventadas(texto_resumo, texto_original):
 # Função gerar_resumos_setor com proteções adicionais
 
 def gerar_resumos_setor(df):
-    api_key = obter_chave_deepseek()
+    api_key = obter_chave_llm()
 
     HEADERS = {
         "Authorization": f"Bearer {api_key}",
@@ -449,7 +439,7 @@ def gerar_resumos_setor(df):
 {prompt_text}"""
         
         payload = {
-            "model": "deepseek-chat",
+            "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
             "messages": [
                 {
                     "role": "system", 
@@ -491,7 +481,7 @@ def gerar_resumos_setor(df):
         for tentativa in range(3):
             try:
                 print(f"🔄 Tentativa {tentativa + 1} para tema: {tema} (ID: {row_id})")
-                response = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=payload, timeout=60)
+                response = requests.post(QWEN_API_URL, headers=HEADERS, json=payload, timeout=60)
                 response.raise_for_status()
                 resultado = response.json()['choices'][0]['message']['content']
                 

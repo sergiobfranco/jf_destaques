@@ -1,6 +1,7 @@
 # Etapa 2: Resumo de até 60 palavras, agrupamento semântico e geração de resumos finais com refinamento por subtemas
 # Versão 5: Adicionado tratamento de datas - Remove datas passadas, mantém datas futuras
 # Data: 03/02/2026
+# Atualizado: Migrado de DeepSeek para Qwen (Qwen/Qwen3.5-35B-A3B-GPTQ-Int4)
 
 import pandas as pd
 import os
@@ -13,29 +14,29 @@ import time
 import random
 from dotenv import load_dotenv
 
-def obter_chave_deepseek():
+def obter_chave_llm():
+    """Obtém a chave de API do arquivo .env (mantida por compatibilidade de estrutura).
+    O endpoint Qwen aceita qualquer valor como chave."""
     load_dotenv()
     config_path = os.path.join("dados", "config", "config_usuario.ini")
     print(f"🛠️ Lendo config de: {config_path}")
-    
+
     config = configparser.ConfigParser()
     config.read(config_path, encoding="utf-8")
     perfil = config.get("usuario", "perfil", fallback="client").strip().lower()
-    
+
     env_var = f"DEEPSEEK_API_KEY_{perfil.upper()}"
     chave = os.getenv(env_var)
-    
+
     print(f"Perfil de usuário: {perfil}")
     print(f"Variável de ambiente esperada: {env_var}")
-    print(f"Chave encontrada: {chave[:10]}..." if chave else "❌ Nenhuma chave encontrada")
-    
-    if not chave:
-        raise ValueError(f"Chave de API não encontrada para o perfil '{perfil}' ({env_var}) no arquivo .env")
-    
-    return chave
+    print(f"Chave encontrada: {chave[:10]}..." if chave else "⚠️ Nenhuma chave encontrada (usando placeholder)")
+
+    # Qwen local não exige chave válida; usa placeholder se não encontrada
+    return chave or "placeholder-key"
 
 
-from config import DEEPSEEK_API_URL, w_marcas
+from config import QWEN_API_URL, w_marcas
 
 
 def carregar_verbos_iniciais():
@@ -536,8 +537,8 @@ def processar_marcas_v2(arq_textos):
     """
     import json
     
-    # ========== Configuração da API DeepSeek ==========
-    api_key = obter_chave_deepseek()
+    # ========== Configuração da API Qwen ==========
+    api_key = obter_chave_llm()
     HEADERS = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -613,7 +614,7 @@ Texto:
         for attempt in range(max_retries):
             try:
                 data = {
-                    "model": "deepseek-chat",
+                    "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
                     "messages": [
                         {
                             "role": "system",
@@ -628,7 +629,7 @@ Texto:
                     "max_tokens": 200
                 }
                 
-                response = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data, timeout=30)
+                response = requests.post(QWEN_API_URL, headers=HEADERS, json=data, timeout=30)
                 response.raise_for_status()
                 resumo = response.json()["choices"][0]["message"]["content"].strip()
                 
@@ -654,7 +655,7 @@ Texto:
 
     def agrupar_por_similaridade(resumos):
         """
-        Agrupa resumos por similaridade temática usando o DeepSeek.
+        Agrupa resumos por similaridade temática usando o Qwen.
         Retorna lista de IDs de grupo para cada resumo.
         """
         import json
@@ -741,14 +742,14 @@ Texto:
             prompt += f"\n{i}. {resumo}"
         
         data = {
-            "model": "deepseek-chat",
+            "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
             "max_tokens": 500
         }
         
         try:
-            resp = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data, timeout=60)
+            resp = requests.post(QWEN_API_URL, headers=HEADERS, json=data, timeout=60)
             resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"].strip()
             
@@ -814,9 +815,9 @@ Texto:
         for i, r in enumerate(resumos, 1):
             prompt += f"Resumo {i}: {r}\n"
 
-        data = {"model": "deepseek-chat","messages":[{"role":"user","content":prompt}],"temperature":0,"max_tokens":200}
+        data = {"model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4","messages":[{"role":"user","content":prompt}],"temperature":0,"max_tokens":200}
         try:
-            resp = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data, timeout=60)
+            resp = requests.post(QWEN_API_URL, headers=HEADERS, json=data, timeout=60)
             resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"].strip()
             
@@ -903,7 +904,7 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
 
 {corpo}"""
         data = {
-            "model": "deepseek-chat",
+            "model": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
             "messages": [
                 {
                     "role": "system",
@@ -918,7 +919,7 @@ Gere um resumo único de até 120 palavras consolidando as notícias a seguir so
             "max_tokens": 400
         }
         try:
-            response = requests.post(DEEPSEEK_API_URL, headers=HEADERS, json=data)
+            response = requests.post(QWEN_API_URL, headers=HEADERS, json=data)
             response.raise_for_status()
             texto = response.json()["choices"][0]["message"]["content"].strip()
 

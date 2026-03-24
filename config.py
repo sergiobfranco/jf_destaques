@@ -5,8 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # DeepSeek config
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+#DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 #DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+QWEN_API_URL = "http://gpu-1.paraiso.sp.datasense.media:8000/v1/chat/completions"
 
 # Pastas
 pasta_api = "dados/api"
